@@ -2151,6 +2151,7 @@ async function autoFetchOnStartup() {
         renderListe();
         renderEditor();
         updateSidebar();
+        renderDashboard();
         showStartupBanner(`✅ ${klasmanlar.length} klasman Sheets'ten otomatik yüklendi!`, 'success');
         console.log('✅ Otomatik yükleme tamamlandı:', klasmanlar.length, 'klasman');
       } else {
@@ -2362,6 +2363,7 @@ async function _firstRunSync() {
       renderListe();
       renderEditor();
       updateSidebar();
+      renderDashboard();
       showStartupBanner(`✅ ${klasmanlar.length} klasman senkronize edildi!`, 'success');
     } else {
       showStartupBanner('ℹ️ Sheets\'te henüz klasman verisi yok', 'info');
@@ -2470,6 +2472,8 @@ async function pullFromSheets() {
       saveData();
       renderListe();
       renderEditor();
+      updateSidebar();
+      renderDashboard();
       showSuccessMessage(`✅ ${count} klasman Google Sheets'ten çekildi!`);
     } else {
       alert('❌ Geçersiz veri formatı döndü.\nApps Script doğru yapılandırıldı mı?');
