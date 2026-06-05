@@ -1359,6 +1359,26 @@ label { font-size: 12px; font-weight: 500; color: var(--muted); display: block; 
           </div>
           <span style="font-size:11px;color:var(--muted)">Seçilirse boş olan satırlar hesaplamaya dahil edilmez.</span>
         </div>
+        <!-- Örnekleme Modu -->
+        <div style="margin-top:12px;padding:10px 14px;background:linear-gradient(135deg,#F3E5F5 0%,#fff 100%);border:1px solid #CE93D8;border-radius:9px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <span style="font-size:15px">🔢</span>
+          <span style="font-size:12px;font-weight:600;color:var(--navy);white-space:nowrap">Örnekleme Modu</span>
+          <div style="display:flex;gap:6px;align-items:center">
+            <label style="margin:0;display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;color:var(--navy);padding:5px 11px;border-radius:7px;border:1.5px solid #CE93D8;background:#fff;transition:all .15s" id="lbl-ornekleme-kapat">
+              <input type="radio" name="ornekleme-mod" value="kapali" id="ornekleme-kapali" onchange="performansHesapla()" checked style="width:auto;padding:0;border:none;box-shadow:none"> Kapalı
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;color:var(--navy);padding:5px 11px;border-radius:7px;border:1.5px solid #CE93D8;background:#fff;transition:all .15s" id="lbl-ornekleme-bir">
+              <input type="radio" name="ornekleme-mod" value="bir" id="ornekleme-bir" onchange="performansHesapla()" style="width:auto;padding:0;border:none;box-shadow:none"> Bir Alttan
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;color:var(--navy);padding:5px 11px;border-radius:7px;border:1.5px solid #CE93D8;background:#fff;transition:all .15s" id="lbl-ornekleme-iki">
+              <input type="radio" name="ornekleme-mod" value="iki" id="ornekleme-iki" onchange="performansHesapla()" style="width:auto;padding:0;border:none;box-shadow:none"> İki Alttan
+            </label>
+          </div>
+          <div id="ornekleme-aciklama" style="font-size:11px;color:var(--muted);flex:1;min-width:200px">
+            Kapalı: gerçek adet kullanılır. <strong>Bir Alttan</strong> / <strong>İki Alttan</strong>: adet örnekleme tablosuna göre dönüştürülür.
+          </div>
+          <div id="ornekleme-tablo-preview" style="font-size:10px;color:var(--muted2);font-family:'DM Mono',monospace;display:none;background:rgba(206,147,216,.1);padding:5px 10px;border-radius:6px;white-space:nowrap"></div>
+        </div>
         <!-- Verimlilik Ayarı -->
         <div style="margin-top:14px;padding:12px 14px;background:linear-gradient(135deg,#FFF8E1 0%,#fff 100%);border:1px solid #FFE082;border-radius:9px;display:flex;align-items:center;gap:18px;flex-wrap:wrap">
           <div style="display:flex;align-items:center;gap:8px">
@@ -4843,6 +4863,64 @@ function renderPerfTabloFromData(page) {
 }
 
 
+// ════════════════════════════════════════════════════════════════════════════════
+// ÖRNEKLEME TABLOSU
+// ════════════════════════════════════════════════════════════════════════════════
+
+// Bir Alttan tablosu: =EĞER(R<=20;R; EĞER(R<=32;20; EĞER(R<=50;20; EĞER(R<=80;32; EĞER(R<=125;50;80)))))
+const ORNEKLEME_BIR = [
+  { max: 20,  val: null }, // R'yi olduğu gibi kullan
+  { max: 32,  val: 20   },
+  { max: 50,  val: 20   },
+  { max: 80,  val: 32   },
+  { max: 125, val: 50   },
+  { max: Infinity, val: 80 }
+];
+
+// İki Alttan: bir alttan'ın bir adım daha aşağısı
+// ≤13→R, ≤20→13, ≤32→13, ≤50→20, ≤80→20, ≤125→32, ≤200→50, >200→80
+const ORNEKLEME_IKI = [
+  { max: 13,  val: null },
+  { max: 20,  val: 13   },
+  { max: 32,  val: 13   },
+  { max: 50,  val: 20   },
+  { max: 80,  val: 20   },
+  { max: 125, val: 32   },
+  { max: 200, val: 50   },
+  { max: Infinity, val: 80 }
+];
+
+function orneklemeAdet(adet, mod) {
+  if (mod === 'kapali' || !mod) return adet;
+  const tablo = mod === 'bir' ? ORNEKLEME_BIR : ORNEKLEME_IKI;
+  for (const basamak of tablo) {
+    if (adet <= basamak.max) {
+      return basamak.val === null ? adet : basamak.val;
+    }
+  }
+  return adet;
+}
+
+function updateOrneklemeUI() {
+  const mod = document.querySelector('input[name="ornekleme-mod"]:checked')?.value || 'kapali';
+  const preview = document.getElementById('ornekleme-tablo-preview');
+  const aciklama = document.getElementById('ornekleme-aciklama');
+  if (!preview) return;
+
+  if (mod === 'kapali') {
+    preview.style.display = 'none';
+    if (aciklama) aciklama.innerHTML = 'Kapalı: gerçek adet kullanılır. <strong>Bir Alttan</strong> / <strong>İki Alttan</strong>: adet örnekleme tablosuna göre dönüştürülür.';
+  } else {
+    const tablo = mod === 'bir' ? ORNEKLEME_BIR : ORNEKLEME_IKI;
+    const satirlar = tablo.map(b => `≤${b.max===Infinity?'∞':b.max}→${b.val===null?'R':b.val}`).join('  ');
+    preview.style.display = 'block';
+    preview.textContent = satirlar;
+    if (aciklama) aciklama.innerHTML = mod === 'bir'
+      ? '<strong>Bir Alttan:</strong> parti büyüklüğüne göre örneklem alınır.'
+      : '<strong>İki Alttan:</strong> daha küçük örneklem — daha az kontrol adedi.';
+  }
+}
+
 function performansHesapla(){
   const tablo=document.getElementById('perf-tablo');
   const empty=document.getElementById('perf-empty');
@@ -4860,7 +4938,10 @@ function performansHesapla(){
   const bitisCol = document.getElementById('col-bitis')?.value || '';
   const mesaiCol = document.getElementById('col-mesai')?.value || '';
   const yapilanDepoCol = document.getElementById('col-yapilan-depo')?.value || '';
+  const orneklemeMod = document.querySelector('input[name="ornekleme-mod"]:checked')?.value || 'kapali';
   const verimlilikHedef = Math.max(1, parseFloat(document.getElementById('inp-verimlilik')?.value) || 100);
+
+  updateOrneklemeUI();
 
   // Verimlilik açıklama güncelle
   const vAciklama = document.getElementById('verimlilik-aciklama');
@@ -4895,7 +4976,8 @@ function performansHesapla(){
   excelRows.forEach(row => {
     const excelKlasman = String(row[klasmanCol]||'').trim();
     const ins = String(row[insCol]||'').trim();
-    const adet = parseFloat(row[adetCol])||0;
+    const adetHam = parseFloat(row[adetCol])||0;
+    const adet = orneklemeAdet(adetHam, orneklemeMod);
     const baslangicTarih = baslangicCol ? row[baslangicCol] : null;
     const bitisTarih = bitisCol ? row[bitisCol] : null;
     const mesaiHam = mesaiCol ? row[mesaiCol] : null;
