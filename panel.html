@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Inspection Performans Paneli</title>
+<title> Inspection Performans Paneli</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
@@ -1652,7 +1652,7 @@ let animationEffect = 'slide'; // slide, fade, zoom, flip
 // APP CONFIG (Tüm Ayarlar)
 // ────────────────────────────
 const APP_CONFIG_KEY = 'lc_inspection_config';
-const DEFAULT_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbyXa5Cg9sEcdsYHwfNDNOonrq1KKAdYSQFnbeQGPPxN9bB9baHoEO084Zb_cQEdmwlUpA/exec';
+const DEFAULT_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbymkAClCnqRdV5dWslp3Jj5AVEV0xbe1GXTbK4fHk6gX3VKWK3CK21DAXVvENFeI1I1nA/exec';
 const DEFAULT_API_TOKEN  = 'lcw-secret-2024';
 let appConfig = {
   password: '',  // Şifre localStorage veya Sheets'ten yüklenir — kaynak kodda saklanmaz
@@ -2272,18 +2272,84 @@ async function pushPerformansToSheets(liste) {
 // PERFORMANS HAM VERİSİNİ SHEETS'E GÖNDER
 // Tam JSON — farklı bilgisayarlardan çekilebilir
 // ─────────────────────────────────────────────
+// Sheets hücresi maks ~50.000 karakter sınırına sahip.
+// Bu yüzden kayitlar[] içindeki ağır alanlar (istasyonDetay, fiiliSure gibi)
+// gönderilmeden önce temizlenir. Detay modal verileri (baslangic/bitis) korunur.
+function _slimForSheets(liste) {
+  return liste.map(ins => ({
+    ins: ins.ins,
+    adet: ins.adet,
+    kayit: ins.kayit,
+    standartSure: ins.standartSure,
+    mesaiSure: ins.mesaiSure,
+    fiiliSure: ins.fiiliSure,
+    kayitFiiliSure: ins.kayitFiiliSure,
+    genelHizPerf: ins.genelHizPerf,
+    genelPerformans: ins.genelPerformans,
+    verimlilikPerf: ins.verimlilikPerf,
+    gunSayisi: ins.gunSayisi,
+    tarihBasariliKayit: ins.tarihBasariliKayit,
+    gunlukDetay: ins.gunlukDetay || [],
+    klasmanlar: Object.fromEntries(
+      Object.entries(ins.klasmanlar || {}).map(([kAd, kd]) => [kAd, {
+        adet: kd.adet,
+        standartSure: kd.standartSure,
+        kayitFiiliSure: kd.kayitFiiliSure,
+        hizPerf: kd.hizPerf,
+        hacimPerf: kd.hacimPerf,
+        // kayitlar: sadece detay modal için gerekli alanlar, ağır alanlar atılır
+        kayitlar: (kd.kayitlar || []).map(k => ({
+          no: k.no,
+          klasman: k.klasman,
+          adet: k.adet,
+          standartSure: k.standartSure,
+          kayitFiiliSure: k.kayitFiiliSure,
+          kontrolAdetSuresi: k.kontrolAdetSuresi,
+          istasyonSuresi: k.istasyonSuresi,
+          // istasyonDetay kaldırıldı — çok büyük
+          baslangic: k.baslangic instanceof Date ? k.baslangic.toISOString() : (k.baslangic || null),
+          bitis: k.bitis instanceof Date ? k.bitis.toISOString() : (k.bitis || null),
+          tarihGecerli: k.tarihGecerli
+        }))
+      }])
+    )
+  }));
+}
+
 async function pushPerformansRawToSheets(liste) {
   const url   = appConfig.sheetsWebAppUrl;
   const token = appConfig.sheetsApiToken;
   if (!url || !token) return;
   try {
-    await iframePost(url, {
-      action: 'setPerformansRaw',
-      token,
-      performansData: liste,
-      savedAt: new Date().toISOString()
-    });
-    console.log('✅ Ham performans verisi Sheets\'e gönderildi:', liste.length, 'inspector');
+    const slim = _slimForSheets(liste);
+    const jsonStr = JSON.stringify(slim);
+    console.log(`📤 Ham veri boyutu: ${Math.round(jsonStr.length / 1024)}KB (${slim.length} inspector)`);
+
+    // Sheets hücresi ~50KB sınırı — aşılırsa kayitlar'ı boşalt ve tekrar dene
+    if (jsonStr.length > 45000) {
+      console.warn('⚠️ Veri büyük, kayıt detayları kırpılıyor...');
+      const slimNokayit = slim.map(ins => ({
+        ...ins,
+        klasmanlar: Object.fromEntries(
+          Object.entries(ins.klasmanlar).map(([k, v]) => [k, { ...v, kayitlar: [] }])
+        )
+      }));
+      await iframePost(url, {
+        action: 'setPerformansRaw',
+        token,
+        performansData: slimNokayit,
+        savedAt: new Date().toISOString()
+      });
+      console.warn('⚠️ Kayıt detayları (baslangic/bitis) Sheets\'e yazılamadı — veri çok büyük. Detay modal başka bilgisayarda açılmayabilir.');
+    } else {
+      await iframePost(url, {
+        action: 'setPerformansRaw',
+        token,
+        performansData: slim,
+        savedAt: new Date().toISOString()
+      });
+      console.log('✅ Ham performans verisi Sheets\'e gönderildi:', slim.length, 'inspector,', Math.round(jsonStr.length/1024), 'KB');
+    }
   } catch(err) {
     console.warn('Ham performans push hatası:', err.message);
   }
@@ -2449,8 +2515,8 @@ async function pushPerformansManual(ev) {
 
     await iframePost(url, { action: 'setPerformans', token, performans: rows, savedAt: new Date().toISOString() });
 
-    // 2) Ham JSON'u gönder (farklı bilgisayardan çekilebilmesi için)
-    await iframePost(url, { action: 'setPerformansRaw', token, performansData, savedAt: new Date().toISOString() });
+    // 2) Ham JSON'u gönder (farklı bilgisayardan çekilebilmesi için — slim format)
+    await pushPerformansRawToSheets(performansData);
 
     showSuccessMessage(`✅ ${performansData.length} inspector verisi Google Sheets'e gönderildi!`);
   } catch(err) {
