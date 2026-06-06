@@ -1288,8 +1288,13 @@ label { font-size: 12px; font-weight: 500; color: var(--muted); display: block; 
       <h1>🎯 Klasman Bazında Gerçekleşen Süre Analizi</h1>
       <p>Standart ve gerçekleşen 1 adet ürün kontrol sürelerini karşılaştırın</p>
     </div>
-    <div class="ph-buttons">
-      <button class="btn btn-primary" onclick="renderKlasmanAnaliz()">🔄 Yenile</button>
+<div class="ph-buttons">
+      <button class="btn" onclick="pullKlasmanAnalizFromSheets()" id="kla-pull-btn">
+        📥 Sheets'ten Çek
+      </button>
+      <button class="btn btn-primary" onclick="pushAndRenderKlasmanAnaliz()" id="kla-push-btn">
+        📤 Sheets'e Gönder & Yenile
+      </button>
     </div>
   </div>
   <div id="klasman-analiz-icerik">
@@ -1705,7 +1710,7 @@ let animationEffect = 'slide'; // slide, fade, zoom, flip
 // APP CONFIG (Tüm Ayarlar)
 // ────────────────────────────
 const APP_CONFIG_KEY = 'lc_inspection_config';
-const DEFAULT_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbwht7FA2SVf2uvrYIy2OxMDZ7HPCWj9X7moaPy2zfDlI0C5d2JdkdBbSxx0ekmiyz8NZQ/exec';
+const DEFAULT_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbzxQ2PunVNaI7h2QgOV71hH5OS7YH9B6Qp_K-Y77s0OAGw0ShlTmkAIdEUwquwpdZaudA/exec';
 const DEFAULT_API_TOKEN  = 'lcw-secret-2024';
 let appConfig = {
   password: '',  // Şifre localStorage veya Sheets'ten yüklenir — kaynak kodda saklanmaz
@@ -2333,7 +2338,8 @@ async function pushToSheets() {
       </div>
     </div>`;
   }).join('');
-
+// Sheets'e otomatik gönder
+  pushKlasmanAnalizToSheets(liste);
   el.innerHTML = `
     <!-- Özet Bar -->
     <div style="background:linear-gradient(135deg,var(--navy) 0%,var(--blue) 100%);border-radius:12px;padding:16px 22px;margin-bottom:20px;display:flex;align-items:center;gap:24px;flex-wrap:wrap;">
@@ -7030,7 +7036,142 @@ if (window.location.hostname === 'localhost' || window.location.hostname === '12
 // Uygulama hazır
 console.log(`✅  Inspection Performans Paneli v${APP_VERSION} hazır!`);
 console.log(`📊 ${klasmanlar.length} klasman, ${performansData.length} inspector verisi yüklendi`);
+// ════════════════════════════════════════════════════════════════════
+// KLASMAN ANALİZ — SHEETS ENTEGRASYONU
+// ════════════════════════════════════════════════════════════════════
 
+async function pushKlasmanAnalizToSheets(liste) {
+  const url   = appConfig.sheetsWebAppUrl;
+  const token = appConfig.sheetsApiToken;
+  if (!url || !token || !liste || !liste.length) return;
+  try {
+    const payload = liste.map(k => ({
+      ad:                  k.ad,
+      standartKontrolSure: k.standartKontrolSure || 0,
+      istasyonSuresi:      k.istasyonSure        || 0,
+      gerceklesenOrt:      (k.toplamAdet > 0 && k.toplamFiiliSure > 0)
+                           ? parseFloat((k.toplamFiiliSure / k.toplamAdet).toFixed(3)) : 0,
+      toplamAdet:          k.toplamAdet          || 0,
+      inspectorSayisi:     k.inspectorSayisi     || 0,
+      toplamFiiliSure:     k.toplamFiiliSure     || 0
+    }));
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'setKlasmanAnaliz', token, klasmanAnaliz: payload, savedAt: new Date().toISOString() }),
+      mode: 'no-cors'
+    });
+    console.log('✅ Klasman analiz Sheets\'e gönderildi:', payload.length, 'klasman');
+  } catch(err) {
+    console.warn('Klasman analiz push hatası:', err.message);
+  }
+}
+
+async function pushAndRenderKlasmanAnaliz() {
+  renderKlasmanAnaliz();          // Önce hesapla & render et (içinde push var)
+  showSuccessMessage('✅ Klasman analizi güncellendi ve Sheets\'e gönderildi!');
+}
+
+async function pullKlasmanAnalizFromSheets() {
+  const url   = appConfig.sheetsWebAppUrl;
+  const token = appConfig.sheetsApiToken;
+  if (!url || !token) {
+    alert('⚠️ Sheets bağlantısı yapılandırılmamış!\nKlasman Yönetimi → Bağlantı Ayarları bölümünden URL ve Token girin.');
+    return;
+  }
+  const btn = document.getElementById('kla-pull-btn');
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.innerHTML = '⏳ Çekiliyor...'; btn.disabled = true; }
+  try {
+    const data = await jsonpFetch(url, { action: 'getKlasmanAnaliz', token });
+    if (data.status === 'ok' && Array.isArray(data.klasmanAnaliz) && data.klasmanAnaliz.length > 0) {
+      // Sheets'ten gelen veriyi ekranda göster
+      const el = document.getElementById('klasman-analiz-icerik');
+      if (!el) return;
+
+      const liste = data.klasmanAnaliz;
+
+      const kartlar = liste.map(k => {
+        const std          = k.standartKontrolSure || 0;
+        const gerceklesen  = k.gerceklesenOrt      || 0;
+        const fark         = gerceklesen > 0 && std > 0 ? gerceklesen - std : null;
+        const farkYuzde    = fark !== null && std > 0 ? Math.round((fark / std) * 100) : null;
+        const barGenislik  = gerceklesen > 0 && std > 0 ? Math.min(200, Math.round((gerceklesen / std) * 100)) : 0;
+        const barRenk      = fark === null ? 'var(--muted2)' : fark <= 0 ? '#00897B' : fark <= std * 0.2 ? '#F57F17' : '#C62828';
+        const farkIkon     = fark === null ? '—' : fark <= 0 ? '▼ Hedef Altında ✓' : '▲ Hedef Üstünde';
+
+        return `
+        <div style="background:#fff;border:1.5px solid var(--border2);border-radius:14px;padding:20px;box-shadow:var(--shadow);position:relative;overflow:hidden;">
+          <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,${barRenk},${barRenk}88);border-radius:14px 14px 0 0;"></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+            <div>
+              <div style="font-size:15px;font-weight:700;color:var(--navy);">${k.ad}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px;">${(k.toplamAdet||0).toLocaleString('tr-TR')} adet · ${k.inspectorSayisi||0} inspector</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:22px;font-weight:800;color:${barRenk};font-family:'DM Mono',monospace;line-height:1;">${gerceklesen > 0 ? gerceklesen.toFixed(2)+'sn' : '—'}</div>
+              <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-top:2px;">Gerçekleşen/Adet</div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+            <div style="background:var(--lblue3);border:1px solid var(--border2);border-radius:10px;padding:12px 14px;">
+              <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">📐 Standart</div>
+              <div style="font-size:18px;font-weight:700;color:var(--navy);font-family:'DM Mono',monospace;">${std > 0 ? std.toFixed(2)+'sn' : '—'}</div>
+              <div style="font-size:10px;color:var(--muted2);margin-top:3px;">1 adet ürün kontrol</div>
+              ${k.istasyonSuresi > 0 ? `<div style="font-size:10px;color:var(--muted2);margin-top:1px;">+ ${k.istasyonSuresi.toFixed(2)}sn istasyon</div>` : ''}
+            </div>
+            <div style="background:${fark!==null&&fark<=0?'var(--lgreen)':fark!==null&&fark<=std*0.2?'var(--lamber)':'var(--lred)'};border:1px solid ${fark!==null&&fark<=0?'#B2DFDB':fark!==null&&fark<=std*0.2?'#FFE082':'#FFCDD2'};border-radius:10px;padding:12px 14px;">
+              <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">⏱ Gerçekleşen</div>
+              <div style="font-size:18px;font-weight:700;color:${barRenk};font-family:'DM Mono',monospace;">${gerceklesen > 0 ? gerceklesen.toFixed(2)+'sn' : '—'}</div>
+              <div style="font-size:10px;color:${barRenk};margin-top:3px;font-weight:600;">${fark !== null ? (fark>0?'+':'')+fark.toFixed(2)+'sn fark' : '—'}${farkYuzde !== null ? ` (${fark>0?'+':''}${farkYuzde}%)` : ''}</div>
+            </div>
+          </div>
+          <div style="margin-bottom:10px;">
+            <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-bottom:4px;">
+              <span>Gerçekleşen / Standart oranı</span>
+              <span style="font-weight:600;color:${barRenk}">${barGenislik}%</span>
+            </div>
+            <div style="height:8px;background:var(--border2);border-radius:4px;overflow:hidden;">
+              <div style="width:${Math.min(100,barGenislik)}%;height:100%;background:${barRenk};border-radius:4px;"></div>
+            </div>
+          </div>
+          <div style="text-align:center;padding:6px 12px;border-radius:8px;background:${fark!==null&&fark<=0?'var(--lgreen)':fark!==null?'var(--lred)':'var(--offwhite)'};border:1px solid ${fark!==null&&fark<=0?'#B2DFDB':fark!==null?'#FFCDD2':'var(--border2)'};">
+            <span style="font-size:11px;font-weight:700;color:${barRenk};">${farkIkon}</span>
+          </div>
+        </div>`;
+      }).join('');
+
+      const hedefte   = liste.filter(k => k.gerceklesenOrt > 0 && k.standartKontrolSure > 0 && k.gerceklesenOrt <= k.standartKontrolSure).length;
+      const yakin     = liste.filter(k => { const g=k.gerceklesenOrt,s=k.standartKontrolSure; return g>0&&s>0&&g>s&&g<=s*1.2; }).length;
+      const yuksek    = liste.filter(k => { const g=k.gerceklesenOrt,s=k.standartKontrolSure; return g>0&&s>0&&g>s*1.2; }).length;
+      const veriYok   = liste.filter(k => !k.gerceklesenOrt || !k.standartKontrolSure).length;
+
+      el.innerHTML = `
+        <div style="background:linear-gradient(135deg,var(--navy) 0%,var(--blue) 100%);border-radius:12px;padding:16px 22px;margin-bottom:20px;display:flex;align-items:center;gap:24px;flex-wrap:wrap;">
+          <div style="font-size:28px;">🎯</div>
+          <div style="flex:1;">
+            <div style="font-size:15px;font-weight:700;color:#fff;">Klasman Analizi — Sheets'ten Çekildi</div>
+            <div style="font-size:11px;color:rgba(255,255,255,.6);margin-top:3px;">${liste.length} klasman · ${liste.reduce((s,k)=>s+(k.toplamAdet||0),0).toLocaleString('tr-TR')} toplam adet</div>
+          </div>
+          ${[['✅','Hedefte',hedefte,'#4CAF50'],['⚠️','Yakın',yakin,'#FFB74D'],['🔴','Yüksek',yuksek,'#EF9A9A'],['➖','Veri Yok',veriYok,'rgba(255,255,255,.5)']].map(([ic,lb,cnt,col])=>`
+          <div style="text-align:center;background:rgba(255,255,255,.1);border-radius:10px;padding:10px 16px;min-width:80px;">
+            <div style="font-size:16px;">${ic}</div>
+            <div style="font-size:20px;font-weight:800;color:${col};font-family:'DM Mono',monospace;line-height:1.2;">${cnt}</div>
+            <div style="font-size:9px;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.5px;">${lb}</div>
+          </div>`).join('')}
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;">${kartlar}</div>
+      `;
+      showSuccessMessage(`✅ ${liste.length} klasman analizi Sheets'ten yüklendi!`);
+    } else {
+      alert('ℹ️ Sheets\'te henüz klasman analiz verisi yok.\n\nÖnce "📤 Sheets\'e Gönder & Yenile" butonuna basın.');
+    }
+  } catch(err) {
+    alert('❌ Veri çekilemedi: ' + err.message);
+  } finally {
+    if (btn) { btn.innerHTML = orig; btn.disabled = false; }
+  }
+}
 </script>
 </body>
 </html>
