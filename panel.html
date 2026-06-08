@@ -4213,475 +4213,89 @@ function toggleKlasmanDetails(element) {
 // ────────────────────────────
 // INSPECTOR DETAY MODAL
 // ────────────────────────────
-async function showInspectorDetail(inspectorName) {
+function showInspectorDetail(inspectorName) {
   const inspector = performansData.find(i => i.ins === inspectorName);
   if (!inspector) return;
   selectedInspectorDetail = inspector;
 
   document.getElementById('detail-modal-title').textContent = `${inspector.ins} — Detaylı Performans`;
 
-  // Önce mevcut kayitlar'ı kontrol et; yoksa Sheets'ten çek
+  // ── ANINDA AÇ: mevcut veriyle overlay'i hemen göster ──
+  const _aoHedefValNow = Math.max(1, parseFloat(document.getElementById('inp-verimlilik')?.value) || 100);
+  
+  // tumKayitlar'ı şimdiki veriyle hemen hesapla (aşağıda da yeniden hesaplanır)
+  const buildTumKayitlar = (insp) => {
+    const list = [];
+    Object.entries(insp.klasmanlar).forEach(([klasmanAd, kd]) => {
+      (kd.kayitlar || []).forEach(k => {
+        list.push({
+          id: list.length + 1, klasman: klasmanAd,
+          adet: k.adet, kontrolAdetSuresi: k.kontrolAdetSuresi || 0,
+          istasyonSuresi: k.istasyonSuresi || 0, standartSure: k.standartSure || 0,
+          kayitFiiliSure: k.kayitFiiliSure || 0, baslangic: k.baslangic,
+          bitis: k.bitis, tarihGecerli: k.tarihGecerli,
+          ortalamaKontrolSn: k.adet > 0 && k.kayitFiiliSure > 0 ? Math.round(k.kayitFiiliSure / k.adet) : null
+        });
+      });
+    });
+    return list;
+  };
+
+  // Overlay'i mevcut veriyle anında aç
+  openAnalizOverlay(buildTumKayitlar(inspector), inspector, _aoHedefValNow);
+
+  // ── ARKA PLAN: Sheets'ten veri çek, gelince tabloyu güncelle ──
   const herhangiKayitVar = Object.values(inspector.klasmanlar || {}).some(
     kd => Array.isArray(kd.kayitlar) && kd.kayitlar.length > 0
   );
-
   if (!herhangiKayitVar) {
     const url   = appConfig.sheetsWebAppUrl;
     const token = appConfig.sheetsApiToken;
     if (url && token) {
-      try {
-        const data = await jsonpFetch(url, { action: 'getInspectorKayitlar', token, inspectorAdi: inspectorName.normalize('NFC').trim() });
-        if (data.status === 'ok' && data.kayitlar && typeof data.kayitlar === 'object') {
-          // Çekilen kayitlar'ı inspector nesnesine işle
-          // NOT: Sheets'teki klasman adı ile performansData'daki klasman adı
-          // büyük/küçük harf veya boşluk farkı olabilir — case-insensitive eşleştir
-          const insKlasmanKeys = Object.keys(inspector.klasmanlar);
-          Object.entries(data.kayitlar).forEach(([klasmanAd, kayitlarArr]) => {
-            if (!Array.isArray(kayitlarArr) || kayitlarArr.length === 0) return;
-            // Önce birebir eşleştir, yoksa normalize edilmiş eşleştir
-            const norm = (s) => s.normalize('NFC').trim().toLowerCase();
-            let hedefKey = insKlasmanKeys.find(k => k === klasmanAd)
-              || insKlasmanKeys.find(k => norm(k) === norm(klasmanAd));
-            if (!hedefKey) return;
-            inspector.klasmanlar[hedefKey].kayitlar = kayitlarArr.map(r => ({
-              ...r,
-              kontrolAdetSuresi: r.kontrolAdetSuresi || 0,
-              istasyonSuresi: r.istasyonSuresi || 0,
-              standartSure: r.standartSure || 0,
-              kayitFiiliSure: r.kayitFiiliSure || 0,
-              tarihGecerli: r.tarihGecerli || false,
-              baslangic: r.baslangic ? (() => { const d = new Date(r.baslangic); return isNaN(d.getTime()) ? null : d; })() : null,
-              bitis:     r.bitis     ? (() => { const d = new Date(r.bitis);     return isNaN(d.getTime()) ? null : d; })() : null
-            }));
-          });
-          console.log('[detay] Sheets kayitlari yuklendi:', inspectorName,
-            Object.values(inspector.klasmanlar).reduce((s,kd)=>s+(kd.kayitlar||[]).length,0), 'kayit');
-        } else {
-          console.warn('[detay] getInspectorKayitlar bos/hata dondu:', JSON.stringify(data).substring(0,200));
-        }
-} catch(e) {
-  console.warn('getInspectorKayitlar hatası:', e.message);
-  // Kayıt yok ama özet veri var — detay tabloyu boş göster
-}
+      // Loading göstergesi tablo altına ekle
+      const loadBanner = document.createElement('div');
+      loadBanner.id = 'ao-sheets-loading';
+      loadBanner.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#1565C0;color:#fff;padding:10px 18px;border-radius:10px;font-size:12px;font-family:DM Sans,sans-serif;z-index:9999;box-shadow:0 4px 16px rgba(21,101,192,.4);display:flex;align-items:center;gap:8px;';
+      loadBanner.innerHTML = '<div style="width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;animation:ao-gspin .8s linear infinite;"></div> Kayıt detayları yükleniyor...';
+      document.body.appendChild(loadBanner);
+
+      jsonpFetch(url, { action: 'getInspectorKayitlar', token, inspectorAdi: inspectorName.normalize('NFC').trim() })
+        .then(data => {
+          if (data.status === 'ok' && data.kayitlar && typeof data.kayitlar === 'object') {
+            const insKlasmanKeys = Object.keys(inspector.klasmanlar);
+            const norm = s => s.normalize('NFC').trim().toLowerCase();
+            Object.entries(data.kayitlar).forEach(([klasmanAd, kayitlarArr]) => {
+              if (!Array.isArray(kayitlarArr) || !kayitlarArr.length) return;
+              let hedefKey = insKlasmanKeys.find(k => k === klasmanAd)
+                || insKlasmanKeys.find(k => norm(k) === norm(klasmanAd));
+              if (!hedefKey) return;
+              inspector.klasmanlar[hedefKey].kayitlar = kayitlarArr.map(r => ({
+                ...r,
+                kontrolAdetSuresi: r.kontrolAdetSuresi || 0,
+                istasyonSuresi: r.istasyonSuresi || 0,
+                standartSure: r.standartSure || 0,
+                kayitFiiliSure: r.kayitFiiliSure || 0,
+                tarihGecerli: r.tarihGecerli || false,
+                baslangic: r.baslangic ? (() => { const d = new Date(r.baslangic); return isNaN(d.getTime()) ? null : d; })() : null,
+                bitis: r.bitis ? (() => { const d = new Date(r.bitis); return isNaN(d.getTime()) ? null : d; })() : null
+              }));
+            });
+            // Overlay hâlâ açıksa tabloyu güncelle
+            const ov = document.getElementById('analiz-overlay');
+            if (ov && ov.style.display !== 'none') {
+              const fresh = buildTumKayitlar(inspector);
+              _aoData = fresh;
+              _aoRenderStats();
+              aoApplyFilters();
+              const kb = Object.values(inspector.klasmanlar).reduce((s,kd)=>s+(kd.kayitlar||[]).length,0);
+              console.log('[detay] Sheets kayıtları yüklendi ve tablo güncellendi:', kb, 'kayıt');
+            }
+          }
+        })
+        .catch(e => console.warn('getInspectorKayitlar hatası:', e.message))
+        .finally(() => { const b = document.getElementById('ao-sheets-loading'); if(b) b.remove(); });
     }
   }
-
-  // Tüm kayıtları düz listeye çevir
-  const tumKayitlar = [];
-  Object.entries(inspector.klasmanlar).forEach(([klasmanAd, kd]) => {
-    (kd.kayitlar || []).forEach((k, idx) => {
-      tumKayitlar.push({
-        id: tumKayitlar.length + 1,
-        klasman: klasmanAd,
-        adet: k.adet,
-        kontrolAdetSuresi: k.kontrolAdetSuresi || 0,
-        istasyonSuresi: k.istasyonSuresi || 0,
-        standartSure: k.standartSure || 0,
-        kayitFiiliSure: k.kayitFiiliSure || 0,
-        baslangic: k.baslangic,
-        bitis: k.bitis,
-        tarihGecerli: k.tarihGecerli,
-        ortalamaKontrolSn: k.adet > 0 && k.kayitFiiliSure > 0 ? Math.round(k.kayitFiiliSure / k.adet) : null
-      });
-    });
-  });
-
-  // Benzersiz klasman adları
-  const klasmanAdlari = [...new Set(tumKayitlar.map(k => k.klasman))];
-
-  // Süre formatlayıcı
-  const fmtSn = (sn) => {
-    if (!sn || sn <= 0) return '—';
-    const s = Math.round(sn);
-    const h = Math.floor(s / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    const sc = s % 60;
-    if (h > 0) return `${h}s ${String(m).padStart(2,'0')}d`;
-    if (m > 0) return `${m}d ${String(sc).padStart(2,'0')}sn`;
-    return `${sc}sn`;
-  };
-
-  const fmtTarih = (d) => {
-    if (!d) return '—';
-    const date = (d instanceof Date) ? d : new Date(d);
-    if (isNaN(date.getTime())) return '—';
-    return date.toLocaleDateString('tr-TR', { day:'2-digit', month:'2-digit' }) +
-           ' ' + date.toLocaleTimeString('tr-TR', { hour:'2-digit', minute:'2-digit' });
-  };
-
-  // Özet istatistikler
-  const toplamAdet   = tumKayitlar.reduce((s,k) => s + k.adet, 0);
-  const toplamStandart = tumKayitlar.reduce((s,k) => s + k.standartSure, 0);
-  const toplamFiili  = tumKayitlar.reduce((s,k) => s + k.kayitFiiliSure, 0);
-  const hamPerf      = inspector.genelHizPerf ?? 0;
-  const currentHedefModal = Math.max(1, parseFloat(document.getElementById('inp-verimlilik')?.value) || 100);
-  const totalPerf    = Math.round(hamPerf * (100 / currentHedefModal));
-  const totalMesai   = inspector.mesaiSure || 0;
-
-  // Renk sınıfı
-  const pc = (p) => p >= 95 ? 'perf-excellent' : p >= 85 ? 'perf-good' : p >= 70 ? 'perf-average' : 'perf-poor';
-  const perfColor = (p) => p >= 95 ? '#00897B' : p >= 85 ? '#1565C0' : p >= 70 ? '#F57F17' : '#C62828';
-
-  // Tablo satırları render fonksiyonu
-  function renderKayitlar(liste) {
-    if (!liste.length) return '<tr><td colspan="9" style="padding:24px;text-align:center;color:var(--muted2);">Filtreye uyan kayıt bulunamadı.</td></tr>';
-
-    // Klasman grupları
-    const gruplar = {};
-    liste.forEach(k => {
-      if (!gruplar[k.klasman]) gruplar[k.klasman] = [];
-      gruplar[k.klasman].push(k);
-    });
-
-    let html = '';
-    let globalIdx = 0;
-
-    Object.entries(gruplar).forEach(([klasmanAd, kayitlar]) => {
-      // Grup başlığı
-      const grpAdet = kayitlar.reduce((s,k)=>s+k.adet,0);
-      const grpStandart = kayitlar.reduce((s,k)=>s+k.standartSure,0);
-      const grpFiili = kayitlar.reduce((s,k)=>s+k.kayitFiiliSure,0);
-      const grpOrt = grpAdet > 0 && grpFiili > 0 ? Math.round(grpFiili / grpAdet) : null;
-
-      html += `<tr style="background:var(--navy);color:#fff;">
-        <td colspan="9" style="padding:8px 14px;font-size:12px;font-weight:700;letter-spacing:.3px;">
-          📦 ${klasmanAd}
-          <span style="font-weight:400;opacity:.7;margin-left:12px;font-size:11px;">
-            ${kayitlar.length} kayıt &nbsp;·&nbsp; ${grpAdet} adet toplam &nbsp;·&nbsp; ${fmtSn(grpStandart)} standart
-            ${grpFiili > 0 ? ' &nbsp;·&nbsp; ' + fmtSn(grpFiili) + ' gerçekleşen' : ''}
-            ${grpOrt ? ' &nbsp;·&nbsp; <strong style="color:#FFD700">ort. ' + grpOrt + 'sn/adet</strong>' : ''}
-          </span>
-        </td>
-      </tr>`;
-
-      kayitlar.forEach((k, i) => {
-        globalIdx++;
-        const rowBg = i % 2 === 0 ? '#F4F8FF' : '#fff';
-        const ortSn = k.ortalamaKontrolSn;
-        // Ortalama kontrol süresi vs. standart karşılaştırma rengi
-        const ortColor = ortSn === null ? 'var(--muted2)' :
-                         ortSn <= k.kontrolAdetSuresi ? '#00897B' :
-                         ortSn <= k.kontrolAdetSuresi * 1.2 ? '#F57F17' : '#C62828';
-
-        html += `<tr style="background:${rowBg};border-bottom:1px solid var(--border2);" class="kayit-row">
-          <td style="padding:9px 12px;color:var(--muted2);font-size:11px;font-family:'DM Mono',monospace;text-align:center;">${globalIdx}</td>
-          <td style="padding:9px 12px;font-size:12px;font-weight:600;color:var(--navy);">${k.klasman}</td>
-          <td style="padding:9px 12px;text-align:center;font-family:'DM Mono',monospace;font-weight:700;font-size:14px;color:var(--navy);">${k.adet}</td>
-          <td style="padding:9px 12px;text-align:center;font-family:'DM Mono',monospace;font-size:12px;color:var(--blue2);">${k.kontrolAdetSuresi}sn</td>
-          <td style="padding:9px 12px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;">
-            <span style="color:var(--blue2)">${fmtSn(k.kontrolAdetSuresi * k.adet)}</span>
-            ${k.istasyonSuresi > 0 ? `<span style="color:var(--muted);font-size:10px;display:block">+ ${fmtSn(k.istasyonSuresi)} istasyon</span>` : ''}
-            <span style="color:var(--navy);font-weight:600;font-size:13px;">${fmtSn(k.standartSure)}</span>
-          </td>
-          <td style="padding:9px 12px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:${k.kayitFiiliSure>0?'var(--green)':'var(--muted2)'};">${fmtSn(k.kayitFiiliSure)}</td>
-          <td style="padding:9px 12px;text-align:center;font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:${ortColor};">
-            ${ortSn !== null ? ortSn + 'sn' : '—'}
-            ${ortSn !== null ? `<div style="font-size:9px;font-weight:400;color:${ortColor};">${ortSn <= k.kontrolAdetSuresi ? '✓ hedef' : '↑ hedefin üstü'}</div>` : '<div style="font-size:9px;color:var(--muted2);">tarih yok</div>'}
-          </td>
-          <td style="padding:9px 12px;text-align:center;font-size:11px;color:var(--muted);">
-            ${k.tarihGecerli && k.baslangic ? fmtTarih(k.baslangic) : '—'}
-          </td>
-          <td style="padding:9px 12px;text-align:center;font-size:11px;color:var(--muted);">
-            ${k.tarihGecerli && k.bitis ? fmtTarih(k.bitis) : '—'}
-          </td>
-          <td style="padding:9px 12px;text-align:center;font-family:'DM Mono',monospace;font-size:12px;font-weight:700;">
-            ${(() => {
-              if (!k.kayitFiiliSure || !k.standartSure) return '<span style="color:var(--muted2)">—</span>';
-              const oran = Math.round((k.standartSure / k.kayitFiiliSure) * 100);
-              const renk = oran >= 100 ? '#00897B' : oran >= 80 ? '#F57F17' : '#C62828';
-              const emoji = oran >= 100 ? '✓' : '↓';
-              const etiket = oran >= 100 ? 'hedef içi' : 'hedef altı';
-              return `<span style="color:${renk}">${oran}%</span><div style="font-size:9px;font-weight:400;color:${renk}">${emoji} ${etiket}</div>`;
-            })()}
-          </td>
-        </tr>`;
-      });
-    });
-
-    return html;
-  }
-
-  // Filtreleri uygula
-  function applyFilters() {
-    const klasmanFilter = document.getElementById('det-filter-klasman')?.value || '';
-    const sortFilter    = document.getElementById('det-filter-sort')?.value    || 'default';
-    const minAdet       = parseInt(document.getElementById('det-filter-minadet')?.value) || 0;
-    const tarihFilter   = document.getElementById('det-filter-tarih')?.value   || '';
-
-    let filtered = tumKayitlar.filter(k => {
-      if (klasmanFilter && k.klasman !== klasmanFilter) return false;
-      if (minAdet > 0 && k.adet < minAdet) return false;
-      if (tarihFilter === 'withdate' && !k.tarihGecerli) return false;
-      if (tarihFilter === 'nodate'   &&  k.tarihGecerli) return false;
-      return true;
-    });
-
-    // Sıralama
-    if (sortFilter === 'adet-desc')    filtered.sort((a,b) => b.adet - a.adet);
-    else if (sortFilter === 'adet-asc')     filtered.sort((a,b) => a.adet - b.adet);
-    else if (sortFilter === 'standart-desc') filtered.sort((a,b) => b.standartSure - a.standartSure);
-    else if (sortFilter === 'ort-desc')  filtered.sort((a,b) => (b.ortalamaKontrolSn||0) - (a.ortalamaKontrolSn||0));
-    else if (sortFilter === 'ort-asc')   filtered.sort((a,b) => (a.ortalamaKontrolSn||Infinity) - (b.ortalamaKontrolSn||Infinity));
-    else if (sortFilter === 'tarih-asc') filtered.sort((a,b) => (a.baslangic||new Date(0)) - (b.baslangic||new Date(0)));
-
-    // Filtre özeti
-    const filtAdet = filtered.reduce((s,k)=>s+k.adet,0);
-    const filtStandart = filtered.reduce((s,k)=>s+k.standartSure,0);
-    const filtFiili = filtered.reduce((s,k)=>s+k.kayitFiiliSure,0);
-    document.getElementById('det-filter-summary').innerHTML =
-      `<b>${filtered.length}</b> kayıt &nbsp;·&nbsp; <b>${filtAdet}</b> adet &nbsp;·&nbsp; <b>${fmtSn(filtStandart)}</b> standart` +
-      (filtFiili>0 ? ` &nbsp;·&nbsp; <b>${fmtSn(filtFiili)}</b> gerçekleşen` : '');
-
-    document.getElementById('det-kayit-tbody').innerHTML = renderKayitlar(filtered);
-  }
-
-  // HTML oluştur
-  document.getElementById('detail-modal-content').innerHTML = `
-
-    <!-- Özet Kartlar -->
-    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px;">
-      ${[
-        ['📦','TOPLAM ADET',String(toplamAdet),'var(--navy)'],
-        ['⏱','STANDART SÜRE',fmtSn(toplamStandart),'var(--navy)'],
-        ['🕐','GERÇEKLEŞen',toplamFiili>0?fmtSn(toplamFiili):'—',toplamFiili>0?'var(--green)':'var(--muted2)'],
-        ['🗓','MESAİ SÜRESİ', fmtSn(totalMesai) + (inspector.toplamMesaistiSaniye > 0 ? ` (+${Math.round(inspector.toplamMesaistiSaniye/60)}dk 🌙)` : ''), inspector.toplamMesaistiSaniye > 0 ? '#E65100' : 'var(--navy)'],
-        ['📊','DÜZ. PERFORMANS',(totalPerf??0)+'%',perfColor(totalPerf)]
-      ].map(([ic,lb,val,col])=>`
-        <div style="background:var(--lblue3);border:1px solid var(--border2);border-radius:10px;padding:12px 8px;text-align:center;">
-          <div style="font-size:16px;margin-bottom:2px;">${ic}</div>
-          <div style="font-size:16px;font-weight:700;color:${col};font-family:'DM Mono',monospace;line-height:1.2;">${val}</div>
-          <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-top:3px;">${lb}</div>
-        </div>`).join('')}
-    </div>
-
-    <!-- Filtre Çubuğu -->
-    <div style="background:var(--offwhite);border:1px solid var(--border2);border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
-      <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;">🔍 Filtrele</span>
-
-      <select id="det-filter-klasman" onchange="window._detApply && window._detApply()"
-        style="padding:5px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;background:#fff;color:var(--navy);min-width:130px;">
-        <option value="">Tüm Klasmanlar</option>
-        ${klasmanAdlari.map(k=>`<option value="${k}">${k}</option>`).join('')}
-      </select>
-
-      <select id="det-filter-tarih" onchange="window._detApply && window._detApply()"
-        style="padding:5px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;background:#fff;color:var(--navy);">
-        <option value="">Tüm Kayıtlar</option>
-        <option value="withdate">Tarihi Olanlar</option>
-        <option value="nodate">Tarihi Olmayanlar</option>
-      </select>
-
-      <label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px;">
-        Min. Adet:
-        <input id="det-filter-minadet" type="number" min="0" value="0" oninput="window._detApply && window._detApply()"
-          style="width:60px;padding:4px 8px;border:1px solid var(--border);border-radius:7px;font-size:12px;">
-      </label>
-
-      <select id="det-filter-sort" onchange="window._detApply && window._detApply()"
-        style="padding:5px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;background:#fff;color:var(--navy);">
-        <option value="default">Varsayılan Sıra</option>
-        <option value="adet-desc">Adet ↓</option>
-        <option value="adet-asc">Adet ↑</option>
-        <option value="standart-desc">Standart Süre ↓</option>
-        <option value="ort-desc">Ort. Kontrol Sn ↓</option>
-        <option value="ort-asc">Ort. Kontrol Sn ↑</option>
-        <option value="tarih-asc">Tarihe Göre ↑</option>
-      </select>
-
-      <button onclick="document.getElementById('det-filter-klasman').value='';document.getElementById('det-filter-tarih').value='';document.getElementById('det-filter-minadet').value=0;document.getElementById('det-filter-sort').value='default';window._detApply && window._detApply();"
-        style="padding:5px 12px;border:1px solid var(--border);border-radius:7px;font-size:11px;background:#fff;cursor:pointer;color:var(--muted);">↺ Sıfırla</button>
-
-      <span id="det-filter-summary" style="margin-left:auto;font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;"></span>
-    </div>
-
-    <!-- Kayıt Tablosu -->
-    <div style="overflow-x:auto;border-radius:10px;border:1px solid var(--border2);max-height:420px;overflow-y:auto;">
-      <table style="width:100%;border-collapse:collapse;min-width:880px;">
-        <thead style="position:sticky;top:0;z-index:10;">
-          <tr style="background:var(--navy2);color:#fff;">
-            <th style="padding:10px 12px;text-align:center;font-size:11px;width:40px;">#</th>
-            <th style="padding:10px 12px;text-align:left;font-size:11px;">Klasman</th>
-            <th style="padding:10px 12px;text-align:center;font-size:11px;">Adet</th>
-            <th style="padding:10px 12px;text-align:center;font-size:11px;">Kontrol Süresi<br><span style="opacity:.6;font-weight:400">(sn/adet)</span></th>
-            <th style="padding:10px 12px;text-align:right;font-size:11px;">Standart Süre</th>
-            <th style="padding:10px 12px;text-align:right;font-size:11px;">Gerçekleşen Süre</th>
-            <th style="padding:10px 12px;text-align:center;font-size:11px;">Ort. Kontrol<br><span style="opacity:.6;font-weight:400">(sn/adet)</span></th>
-            <th style="padding:10px 12px;text-align:center;font-size:11px;">Başlangıç</th>
-            <th style="padding:10px 12px;text-align:center;font-size:11px;">Bitiş</th>
-            <th style="padding:10px 12px;text-align:center;font-size:11px;">Oran<br><span style="opacity:.6;font-weight:400">(Std./Ger.)</span></th>
-          </tr>
-        </thead>
-        <tbody id="det-kayit-tbody">
-        </tbody>
-      </table>
-    </div>
-
-    <!-- Not -->
-    <div style="margin-top:12px;padding:8px 12px;background:var(--lamber);border:1px solid #FFE082;border-radius:8px;font-size:10px;color:var(--muted);line-height:1.8;">
-      <strong style="color:var(--amber);">ℹ️</strong>
-      Standart = (Kontrol Süresi × Adet) + İstasyon &nbsp;|&nbsp;
-      Gerçekleşen = Başlangıç–Bitiş farkı &nbsp;|&nbsp;
-      Ort. Kontrol = Gerçekleşen ÷ Adet &nbsp;|&nbsp;
-      Oran = Standart ÷ Gerçekleşen × 100 (↑ yüksek = hızlı) &nbsp;|&nbsp;
-      <span style="color:#00897B;">✓ hedef</span> = Ort. ≤ Standart kontrol süresi
-    </div>
-  `;
-
-  // Filtre fonksiyonunu global olarak kaydet ve ilk render'ı yap
-  window._detApply = applyFilters;
-  applyFilters();
-
-  // Yeni sekmede aç
-const win = window.open('', '_blank');
-win.document.write(`<!DOCTYPE html><html lang="tr"><head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>${inspector.ins} — Detaylı Performans</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'DM Sans',sans-serif;background:#F4F8FF;color:#0D1B2E;padding:24px;font-size:14px}
-.header{background:linear-gradient(135deg,#0B1F3A,#1565C0);color:#fff;padding:20px 28px;border-radius:12px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between}
-.header h1{font-size:20px;font-weight:700}
-.header p{font-size:12px;opacity:.7;margin-top:4px}
-.stats-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px}
-.stat-card{background:#fff;border:1px solid #DDEEFF;border-radius:10px;padding:14px;text-align:center}
-.stat-value{font-size:20px;font-weight:700;font-family:'DM Mono',monospace;line-height:1.2}
-.stat-label{font-size:9px;color:#5A7FA8;text-transform:uppercase;letter-spacing:.6px;margin-top:4px}
-.filter-bar{background:#fff;border:1px solid #DDEEFF;border-radius:10px;padding:14px 18px;margin-bottom:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-.filter-bar select,.filter-bar input{padding:6px 10px;border:1px solid #CFE3F7;border-radius:7px;font-size:12px;font-family:'DM Sans',sans-serif}
-.filter-bar label{font-size:11px;color:#5A7FA8}
-.btn-reset{padding:6px 14px;border:1px solid #CFE3F7;border-radius:7px;font-size:11px;background:#fff;cursor:pointer;color:#5A7FA8}
-.filter-summary{margin-left:auto;font-size:11px;color:#5A7FA8;font-family:'DM Mono',monospace}
-.table-wrap{background:#fff;border:1px solid #DDEEFF;border-radius:10px;overflow:hidden}
-table{width:100%;border-collapse:collapse;min-width:900px}
-thead{position:sticky;top:0;z-index:10}
-th{padding:10px 12px;background:#0B1F3A;color:#fff;font-size:11px;font-weight:600;text-align:center}
-th:nth-child(2){text-align:left}
-td{padding:9px 12px;border-bottom:1px solid #EEF7FF;font-size:12px;text-align:center}
-td:nth-child(2){text-align:left;font-weight:600;color:#0B1F3A}
-.group-row{background:#0B1F3A!important;color:#fff;font-size:12px;font-weight:700;padding:8px 14px}
-.group-row td{color:#fff!important;text-align:left}
-tr:hover td{background:#F4F8FF}
-.note{margin-top:14px;padding:10px 14px;background:#FFF8E1;border:1px solid #FFE082;border-radius:8px;font-size:10px;color:#5A7FA8;line-height:1.8}
-.perf-green{color:#00897B;font-weight:700}
-.perf-blue{color:#1565C0;font-weight:700}
-.perf-amber{color:#F57F17;font-weight:700}
-.perf-red{color:#C62828;font-weight:700}
-@media print{.filter-bar,.no-print{display:none}.header{break-after:avoid}}
-</style>
-</head><body>
-<div class="header">
-  <div>
-    <h1>📊 ${inspector.ins} — Detaylı Performans</h1>
-    <p>Klasman bazında detaylı performans analizi · ${new Date().toLocaleDateString('tr-TR',{day:'2-digit',month:'long',year:'numeric'})}</p>
-  </div>
-  <div style="display:flex;gap:10px">
-    <button onclick="window.print()" style="padding:8px 16px;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:8px;cursor:pointer;font-size:12px">🖨️ Yazdır</button>
-  </div>
-</div>
-<div class="stats-grid" id="stats-grid"></div>
-<div class="filter-bar no-print">
-  <label>Klasman: <select id="f-klasman" onchange="applyFilters()"><option value="">Tümü</option></select></label>
-  <label>Tarih: <select id="f-tarih" onchange="applyFilters()"><option value="">Tümü</option><option value="withdate">Tarihi Olanlar</option><option value="nodate">Tarihi Olmayanlar</option></select></label>
-  <label>Min. Adet: <input type="number" id="f-minadet" value="0" min="0" oninput="applyFilters()" style="width:60px"></label>
-  <label>Sırala: <select id="f-sort" onchange="applyFilters()"><option value="">Varsayılan</option><option value="adet-desc">Adet ↓</option><option value="adet-asc">Adet ↑</option><option value="ort-desc">Ort. Kontrol ↓</option><option value="tarih-asc">Tarihe Göre ↑</option></select></label>
-  <button class="btn-reset" onclick="resetFilters()">↺ Sıfırla</button>
-  <span class="filter-summary" id="f-summary"></span>
-</div>
-<div class="table-wrap" style="overflow-x:auto;max-height:65vh;overflow-y:auto">
-  <table><thead><tr>
-    <th>#</th><th style="text-align:left">Klasman</th><th>Adet</th>
-    <th>Kontrol Süresi<br><span style="opacity:.6;font-weight:400">(sn/adet)</span></th>
-    <th>Standart Süre</th><th>Gerçekleşen Süre</th>
-    <th>Ort. Kontrol<br><span style="opacity:.6;font-weight:400">(sn/adet)</span></th>
-    <th>Başlangıç</th><th>Bitiş</th>
-    <th>Oran<br><span style="opacity:.6;font-weight:400">(Std./Ger.)</span></th>
-  </tr></thead>
-  <tbody id="tablo-body"></tbody></table>
-</div>
-<div class="note">
-  <strong>ℹ️</strong>
-  Standart = (Kontrol Süresi × Adet) + İstasyon &nbsp;|&nbsp;
-  Gerçekleşen = Başlangıç–Bitiş farkı &nbsp;|&nbsp;
-  Ort. Kontrol = Gerçekleşen ÷ Adet &nbsp;|&nbsp;
-  Oran = Standart ÷ Gerçekleşen × 100 &nbsp;|&nbsp;
-  <span class="perf-green">✓ hedef</span> = Ort. ≤ Standart kontrol süresi
-</div>
-<script>
-const _data = ${JSON.stringify(tumKayitlar)};
-const _inspector = ${JSON.stringify({ins: inspector.ins, adet: inspector.adet, standartSure: inspector.standartSure, mesaiSure: inspector.mesaiSure, genelHizPerf: inspector.genelHizPerf, verimlilikPerf: inspector.verimlilikPerf, toplamMesaistiSaniye: inspector.toplamMesaistiSaniye})};
-const _hedef = ${Math.max(1, parseFloat(document.getElementById('inp-verimlilik')?.value) || 100)};
-
-function fmtSn(sn){if(!sn||sn<=0)return'—';const s=Math.round(sn),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=s%60;return h>0?h+'s '+String(m).padStart(2,'0')+'d':m>0?m+'d '+String(sc).padStart(2,'0')+'sn':sc+'sn'}
-function fmtTarih(d){if(!d)return'—';const dt=new Date(d);return isNaN(dt)?'—':dt.toLocaleDateString('tr-TR',{day:'2-digit',month:'2-digit'})+' '+dt.toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})}
-function perfClass(p){return p>=100?'perf-green':p>=80?'perf-blue':p>=60?'perf-amber':'perf-red'}
-
-// Stats
-const totalAdet=_data.reduce((s,k)=>s+k.adet,0);
-const totalStd=_data.reduce((s,k)=>s+k.standartSure,0);
-const totalFiili=_data.reduce((s,k)=>s+k.kayitFiiliSure,0);
-const hamPerf=_inspector.genelHizPerf??0;
-const duzPerf=Math.round(hamPerf*(100/_hedef));
-const mesaiSure=_inspector.mesaiSure||0;
-const overtimeDk=Math.round((_inspector.toplamMesaistiSaniye||0)/60);
-document.getElementById('stats-grid').innerHTML=[
-  ['📦','TOPLAM ADET',totalAdet,''],
-  ['⏱','STANDART SÜRE',fmtSn(totalStd),''],
-  ['🕐','GERÇEKLEŞEN',totalFiili>0?fmtSn(totalFiili):'—','perf-green'],
-  ['📅','MESAİ SÜRESİ',fmtSn(mesaiSure)+(overtimeDk>0?' (+'+overtimeDk+'dk 🌙)':''),overtimeDk>0?'perf-amber':''],
-  ['📊','DÜZ. PERFORMANS',duzPerf+'%',perfClass(duzPerf)]
-].map(([ic,lb,val,cls])=>'<div class="stat-card"><div style="font-size:18px;margin-bottom:4px">'+ic+'</div><div class="stat-value '+cls+'">'+val+'</div><div class="stat-label">'+lb+'</div></div>').join('');
-
-// Klasman filtre doldur
-const klasmanlar=[...new Set(_data.map(k=>k.klasman))];
-klasmanlar.forEach(k=>{const o=document.createElement('option');o.value=k;o.textContent=k;document.getElementById('f-klasman').appendChild(o)});
-
-function applyFilters(){
-  const kf=document.getElementById('f-klasman').value;
-  const tf=document.getElementById('f-tarih').value;
-  const mf=parseInt(document.getElementById('f-minadet').value)||0;
-  const sf=document.getElementById('f-sort').value;
-  let list=[..._data].filter(k=>{
-    if(kf&&k.klasman!==kf)return false;
-    if(mf>0&&k.adet<mf)return false;
-    if(tf==='withdate'&&!k.tarihGecerli)return false;
-    if(tf==='nodate'&&k.tarihGecerli)return false;
-    return true;
-  });
-  if(sf==='adet-desc')list.sort((a,b)=>b.adet-a.adet);
-  else if(sf==='adet-asc')list.sort((a,b)=>a.adet-b.adet);
-  else if(sf==='ort-desc')list.sort((a,b)=>(b.ortalamaKontrolSn||0)-(a.ortalamaKontrolSn||0));
-  else if(sf==='tarih-asc')list.sort((a,b)=>new Date(a.baslangic||0)-new Date(b.baslangic||0));
-  
-  const fAdet=list.reduce((s,k)=>s+k.adet,0);
-  const fStd=list.reduce((s,k)=>s+k.standartSure,0);
-  document.getElementById('f-summary').textContent=list.length+' kayıt · '+fAdet+' adet · '+fmtSn(fStd)+' standart';
-  
-  const gruplar={};
-  list.forEach(k=>{if(!gruplar[k.klasman])gruplar[k.klasman]=[];gruplar[k.klasman].push(k)});
-  let html='',idx=0;
-  Object.entries(gruplar).forEach(([kAd,kayitlar])=>{
-    const gAdet=kayitlar.reduce((s,k)=>s+k.adet,0);
-    const gStd=kayitlar.reduce((s,k)=>s+k.standartSure,0);
-    const gFiili=kayitlar.reduce((s,k)=>s+k.kayitFiiliSure,0);
-    const gOrt=gAdet>0&&gFiili>0?Math.round(gFiili/gAdet):null;
-    html+='<tr class="group-row"><td colspan="10" style="padding:8px 14px">📦 '+kAd+' &nbsp;·&nbsp; <span style="opacity:.7;font-weight:400">'+kayitlar.length+' kayıt · '+gAdet+' adet · '+fmtSn(gStd)+' standart'+(gFiili>0?' · '+fmtSn(gFiili)+' gerçekleşen':'')+(gOrt?' · <strong style="color:#FFD700">ort. '+gOrt+'sn/adet</strong>':'')+'</span></td></tr>';
-    kayitlar.forEach((k,i)=>{
-      idx++;
-      const oran=k.kayitFiiliSure&&k.standartSure?Math.round((k.standartSure/k.kayitFiiliSure)*100):null;
-      const ortSn=k.ortalamaKontrolSn;
-      const ortColor=ortSn===null?'#5A7FA8':ortSn<=k.kontrolAdetSuresi?'#00897B':ortSn<=k.kontrolAdetSuresi*1.2?'#F57F17':'#C62828';
-      const bg=i%2===0?'#F9FBFF':'#fff';
-      html+='<tr style="background:'+bg+'"><td style="color:#5A7FA8;font-family:monospace">'+idx+'</td><td>'+k.klasman+'</td><td style="font-weight:700;font-size:14px">'+k.adet+'</td><td style="color:#1565C0;font-family:monospace">'+k.kontrolAdetSuresi+'sn</td><td style="text-align:right;font-family:monospace"><span style="color:#1565C0">'+fmtSn(k.kontrolAdetSuresi*k.adet)+'</span>'+(k.istasyonSuresi>0?'<div style="font-size:10px;color:#5A7FA8">+ '+fmtSn(k.istasyonSuresi)+' istasyon</div>':'')+'<div style="font-weight:700">'+fmtSn(k.standartSure)+'</div></td><td style="font-family:monospace;color:'+(k.kayitFiiliSure>0?'#00897B':'#5A7FA8')+'">'+fmtSn(k.kayitFiiliSure)+'</td><td style="font-family:monospace;font-weight:700;color:'+ortColor+'">'+(ortSn!==null?ortSn+'sn':'—')+(ortSn!==null?'<div style="font-size:9px;font-weight:400">'+( ortSn<=k.kontrolAdetSuresi?'✓ hedef':'↑ hedefin üstü')+'</div>':'<div style="font-size:9px;color:#5A7FA8">tarih yok</div>')+'</td><td style="font-size:11px;color:#5A7FA8">'+(k.tarihGecerli&&k.baslangic?fmtTarih(k.baslangic):'—')+'</td><td style="font-size:11px;color:#5A7FA8">'+(k.tarihGecerli&&k.bitis?fmtTarih(k.bitis):'—')+'</td><td style="font-family:monospace;font-weight:700">'+(oran!==null?'<span class="'+perfClass(oran)+'">'+oran+'%</span><div style="font-size:9px;font-weight:400">'+( oran>=100?'✓ hedef içi':'↓ hedef altı')+'</div>':'<span style="color:#5A7FA8">—</span>')+'</td></tr>';
-    });
-  });
-  document.getElementById('tablo-body').innerHTML=html||'<tr><td colspan="10" style="padding:24px;text-align:center;color:#5A7FA8">Filtreye uyan kayıt bulunamadı.</td></tr>';
-}
-function resetFilters(){document.getElementById('f-klasman').value='';document.getElementById('f-tarih').value='';document.getElementById('f-minadet').value=0;document.getElementById('f-sort').value='';applyFilters()}
-applyFilters();
-<\/script></body></html>`);
-win.document.close();
 }
 
 function closeDetailModal() {
@@ -7606,5 +7220,565 @@ async function pullKlasmanAnalizFromSheets() {
   }
 }
 </script>
+
+<!-- ══════════════════════════════════════════════════════════
+     ANALİZ TAM EKRAN OVERLAY
+     ══════════════════════════════════════════════════════════ -->
+<div id="analiz-overlay" style="display:none;position:fixed;inset:0;z-index:9000;background:#F4F8FF;overflow-y:auto;font-family:'DM Sans',sans-serif;">
+
+  <!-- Header Bar -->
+  <div id="analiz-overlay-header" style="position:sticky;top:0;z-index:100;background:linear-gradient(135deg,#0B1F3A 0%,#1565C0 100%);color:#fff;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 16px rgba(0,0,0,.3);">
+    <div style="display:flex;align-items:center;gap:14px;">
+      <button id="analiz-geri-btn" onclick="closeAnalizOverlay()" style="display:flex;align-items:center;gap:7px;padding:8px 16px;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:8px;cursor:pointer;font-size:13px;font-family:'DM Sans',sans-serif;font-weight:600;transition:background .15s;" onmouseover="this.style.background='rgba(255,255,255,.25)'" onmouseout="this.style.background='rgba(255,255,255,.15)'">
+        ← Geri
+      </button>
+      <div>
+        <div id="analiz-overlay-title" style="font-size:16px;font-weight:700;letter-spacing:-.2px;"></div>
+        <div style="font-size:11px;opacity:.65;margin-top:2px;">Klasman bazında detaylı performans analizi</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <button onclick="window.print()" style="padding:7px 14px;background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:8px;cursor:pointer;font-size:12px;font-family:'DM Sans',sans-serif;">🖨️ Yazdır</button>
+      <button onclick="exportInspectorDetailFromOverlay()" style="padding:7px 14px;background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:8px;cursor:pointer;font-size:12px;font-family:'DM Sans',sans-serif;">📊 Excel</button>
+    </div>
+  </div>
+
+  <!-- İçerik -->
+  <div style="max-width:1400px;margin:0 auto;padding:24px 28px;">
+
+    <!-- Stats Grid -->
+    <div id="ao-stats-grid" style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px;"></div>
+
+    <!-- ══ GEMİNİ AI BÖLÜMÜ ══ -->
+    <div id="ao-gemini-wrap" style="margin-bottom:24px;">
+      <!-- Toggle Bar -->
+      <div id="ao-gemini-bar" onclick="aoGeminiToggle()" style="display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#0B1F3A 0%,#1565C0 60%,#0d47a1 100%);color:#fff;padding:14px 20px;border-radius:12px;cursor:pointer;user-select:none;box-shadow:0 4px 20px rgba(21,101,192,.35);transition:box-shadow .2s,border-radius .25s;position:relative;overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:12px;z-index:1;">
+          <div style="width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">✨</div>
+          <div>
+            <div style="font-size:14px;font-weight:700;letter-spacing:-.2px;">Gemini AI Performans Analizi</div>
+            <div style="font-size:11px;opacity:.65;margin-top:1px;">Yapay zeka destekli detaylı analiz · Tıkla açmak için</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;z-index:1;">
+          <span id="ao-gemini-badge" style="font-size:10px;font-weight:600;letter-spacing:.6px;padding:4px 10px;border-radius:99px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);text-transform:uppercase;">Kapalı</span>
+          <span id="ao-gemini-chevron" style="font-size:18px;transition:transform .3s;">›</span>
+        </div>
+        <div style="position:absolute;top:-30px;right:-30px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.04);pointer-events:none;"></div>
+      </div>
+
+      <!-- Gemini Panel -->
+      <div id="ao-gemini-panel" style="display:none;background:#fff;border:1px solid #DDEEFF;border-top:none;border-radius:0 0 12px 12px;overflow:hidden;box-shadow:0 8px 24px rgba(21,101,192,.12);">
+
+        <!-- API Key -->
+        <div style="background:linear-gradient(135deg,#EEF7FF,#fff);padding:18px 20px;border-bottom:1px solid #DDEEFF;">
+          <div style="display:flex;align-items:flex-start;gap:14px;">
+            <div style="width:38px;height:38px;border-radius:10px;flex-shrink:0;background:#1565C0;display:flex;align-items:center;justify-content:center;font-size:16px;">🔑</div>
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:700;color:#0B1F3A;margin-bottom:4px;">Gemini API Anahtarı</div>
+              <div style="font-size:11px;color:#5A7FA8;margin-bottom:10px;line-height:1.6;">API anahtarınızı aşağıya girin. Anahtar bu tarayıcıda güvenli şekilde saklanır.
+                <span style="color:#E65100;font-weight:600;">⚠️ Anahtarınızı başkalarıyla paylaşmayın.</span></div>
+              <div style="background:#FFF8E1;border:1px solid #FFE082;border-radius:8px;padding:9px 12px;margin-bottom:12px;font-size:11px;color:#795548;display:flex;align-items:flex-start;gap:8px;">
+                <span style="font-size:14px;flex-shrink:0;">🛡️</span>
+                <span><strong>Güvenlik Uyarısı:</strong> API anahtarınız yalnızca bu sayfada kullanılır ve tarayıcı localStorage'ında saklanır.</span>
+              </div>
+              <!-- Model Seçici -->
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:8px 12px;background:#EEF7FF;border:1px solid #BBDEFB;border-radius:8px;">
+                <span style="font-size:11px;font-weight:600;color:#1565C0;white-space:nowrap;">🤖 Model:</span>
+                <select id="ao-gmodel" style="flex:1;padding:5px 10px;border:1px solid #CFE3F7;border-radius:7px;font-size:12px;font-family:'DM Sans',sans-serif;color:#0B1F3A;background:#fff;">
+                  <option value="gemini-2.0-flash">gemini-2.0-flash (Önerilen)</option>
+                  <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite (Hızlı / Ücretsiz)</option>
+                  <option value="gemini-1.5-flash">gemini-1.5-flash (Eski / Stabil)</option>
+                  <option value="gemini-1.5-flash-8b">gemini-1.5-flash-8b (En Hızlı)</option>
+                  <option value="gemini-1.5-pro">gemini-1.5-pro (Pro)</option>
+                </select>
+                <span style="font-size:10px;color:#5A7FA8;white-space:nowrap;">Hata alırsan farklı model dene</span>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <div style="position:relative;flex:1;">
+                  <input type="password" id="ao-gkey" placeholder="AIzaSy..." style="width:100%;padding:9px 40px 9px 12px;border:1px solid #CFE3F7;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;background:#fff;color:#0B1F3A;outline:none;box-sizing:border-box;">
+                  <button id="ao-gkey-eye" onclick="aoGkeyToggleEye()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:15px;color:#5A7FA8;padding:0;">👁</button>
+                </div>
+                <button onclick="aoGkeySave()" style="padding:9px 18px;background:#1565C0;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-family:'DM Sans',sans-serif;font-weight:600;white-space:nowrap;">💾 Kaydet</button>
+                <button onclick="aoGkeyDelete()" style="padding:9px 14px;background:#fff;color:#C62828;border:1px solid #FFCDD2;border-radius:8px;cursor:pointer;font-size:12px;">🗑</button>
+              </div>
+              <div id="ao-gkey-status" style="margin-top:7px;font-size:11px;height:16px;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Hızlı Analizler -->
+        <div style="padding:16px 20px;border-bottom:1px solid #DDEEFF;background:#F9FBFF;">
+          <div style="font-size:11px;font-weight:700;color:#5A7FA8;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;">⚡ Hızlı Analizler</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;">
+            <button onclick="aoCallGeminiQuick('genel')"   style="padding:8px 14px;background:#EEF7FF;color:#1565C0;border:1px solid #BBDEFB;border-radius:8px;cursor:pointer;font-size:12px;font-family:'DM Sans',sans-serif;font-weight:500;">📊 Genel Performans Değerlendirmesi</button>
+            <button onclick="aoCallGeminiQuick('guclu')"   style="padding:8px 14px;background:#E8F5E9;color:#2E7D32;border:1px solid #C8E6C9;border-radius:8px;cursor:pointer;font-size:12px;font-family:'DM Sans',sans-serif;font-weight:500;">💪 Güçlü/Zayıf Yönler</button>
+            <button onclick="aoCallGeminiQuick('trend')"   style="padding:8px 14px;background:#FFF3E0;color:#E65100;border:1px solid #FFCC80;border-radius:8px;cursor:pointer;font-size:12px;font-family:'DM Sans',sans-serif;font-weight:500;">📈 Zaman &amp; Trend Analizi</button>
+            <button onclick="aoCallGeminiQuick('klasman')" style="padding:8px 14px;background:#F3E5F5;color:#6A1B9A;border:1px solid #CE93D8;border-radius:8px;cursor:pointer;font-size:12px;font-family:'DM Sans',sans-serif;font-weight:500;">👔 Klasman Bazında Karşılaştırma</button>
+            <button onclick="aoCallGeminiQuick('oneri')"   style="padding:8px 14px;background:#E0F7FA;color:#00695C;border:1px solid #80DEEA;border-radius:8px;cursor:pointer;font-size:12px;font-family:'DM Sans',sans-serif;font-weight:500;">💡 İyileştirme Önerileri</button>
+            <button onclick="aoCallGeminiQuick('mesai')"   style="padding:8px 14px;background:#FCE4EC;color:#AD1457;border:1px solid #F48FB1;border-radius:8px;cursor:pointer;font-size:12px;font-family:'DM Sans',sans-serif;font-weight:500;">🌙 Mesai &amp; Yoğunluk Analizi</button>
+          </div>
+        </div>
+
+        <!-- Özel Soru -->
+        <div style="padding:16px 20px;border-bottom:1px solid #DDEEFF;background:#fff;">
+          <div style="font-size:11px;font-weight:700;color:#5A7FA8;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;">💬 Özel Soru Sor</div>
+          <div style="display:flex;gap:8px;">
+            <textarea id="ao-gcustom" placeholder="Bu çalışanın performansını nasıl değerlendirirsin?..." style="flex:1;min-height:70px;padding:10px 14px;border:1px solid #CFE3F7;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;color:#0B1F3A;background:#FAFCFF;resize:vertical;outline:none;line-height:1.6;" onkeydown="if(event.ctrlKey&&event.key==='Enter'){aoCallGeminiCustom();}"></textarea>
+            <button onclick="aoCallGeminiCustom()" style="padding:10px 18px;background:linear-gradient(135deg,#1565C0,#0d47a1);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-family:'DM Sans',sans-serif;font-weight:600;align-self:flex-end;white-space:nowrap;">Gönder ↵</button>
+          </div>
+          <div style="font-size:10px;color:#8AAAC8;margin-top:5px;">Ctrl+Enter ile de gönderebilirsiniz</div>
+        </div>
+
+        <!-- Sonuç -->
+        <div id="ao-gresult" style="display:none;padding:20px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="width:6px;height:6px;border-radius:50%;background:#1565C0;"></div>
+              <div id="ao-gresult-title" style="font-size:12px;font-weight:700;color:#0B1F3A;">Analiz Sonucu</div>
+            </div>
+            <button id="ao-gclear" onclick="aoClearResult()" style="padding:4px 12px;background:#fff;color:#5A7FA8;border:1px solid #CFE3F7;border-radius:6px;cursor:pointer;font-size:11px;font-family:'DM Sans',sans-serif;">✕ Temizle</button>
+          </div>
+          <div id="ao-gloading" style="display:none;text-align:center;padding:30px 0;">
+            <div style="width:40px;height:40px;border-radius:50%;margin:0 auto 12px;border:3px solid #BBDEFB;border-top-color:#1565C0;animation:ao-gspin 0.8s linear infinite;"></div>
+            <div style="font-size:13px;color:#5A7FA8;">Gemini analiz ediyor...</div>
+          </div>
+          <div id="ao-goutput" style="display:none;background:linear-gradient(135deg,#F4F8FF,#fff);border:1px solid #DDEEFF;border-radius:10px;padding:20px;font-size:13px;color:#0B1F3A;line-height:1.8;white-space:pre-wrap;font-family:'DM Sans',sans-serif;min-height:60px;"></div>
+        </div>
+
+        <!-- Hata -->
+        <div id="ao-gerror" style="display:none;padding:16px 20px;">
+          <div style="background:#FFEBEE;border:1px solid #FFCDD2;border-radius:8px;padding:12px 16px;font-size:12px;color:#C62828;display:flex;gap:10px;align-items:flex-start;">
+            <span style="font-size:16px;flex-shrink:0;">⚠️</span>
+            <span id="ao-gerror-msg"></span>
+          </div>
+        </div>
+
+      </div><!-- /ao-gemini-panel -->
+    </div><!-- /ao-gemini-wrap -->
+
+    <!-- Filtre Çubuğu -->
+    <div style="background:#fff;border:1px solid #DDEEFF;border-radius:10px;padding:14px 18px;margin-bottom:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;" class="no-print">
+      <span style="font-size:11px;font-weight:700;color:#5A7FA8;text-transform:uppercase;letter-spacing:.6px;">🔍 Filtrele</span>
+      <label style="font-size:11px;color:#5A7FA8;display:flex;align-items:center;gap:6px;">Klasman:
+        <select id="ao-f-klasman" onchange="aoApplyFilters()" style="padding:6px 10px;border:1px solid #CFE3F7;border-radius:7px;font-size:12px;font-family:'DM Sans',sans-serif;min-width:130px;"><option value="">Tümü</option></select>
+      </label>
+      <label style="font-size:11px;color:#5A7FA8;display:flex;align-items:center;gap:6px;">Tarih:
+        <select id="ao-f-tarih" onchange="aoApplyFilters()" style="padding:6px 10px;border:1px solid #CFE3F7;border-radius:7px;font-size:12px;font-family:'DM Sans',sans-serif;">
+          <option value="">Tümü</option><option value="withdate">Tarihi Olanlar</option><option value="nodate">Tarihi Olmayanlar</option>
+        </select>
+      </label>
+      <label style="font-size:11px;color:#5A7FA8;display:flex;align-items:center;gap:6px;">Min. Adet:
+        <input id="ao-f-minadet" type="number" min="0" value="0" oninput="aoApplyFilters()" style="width:65px;padding:6px 10px;border:1px solid #CFE3F7;border-radius:7px;font-size:12px;">
+      </label>
+      <label style="font-size:11px;color:#5A7FA8;display:flex;align-items:center;gap:6px;">Sırala:
+        <select id="ao-f-sort" onchange="aoApplyFilters()" style="padding:6px 10px;border:1px solid #CFE3F7;border-radius:7px;font-size:12px;font-family:'DM Sans',sans-serif;">
+          <option value="">Varsayılan</option><option value="adet-desc">Adet ↓</option><option value="adet-asc">Adet ↑</option>
+          <option value="ort-desc">Ort. Kontrol ↓</option><option value="tarih-asc">Tarihe Göre ↑</option>
+        </select>
+      </label>
+      <button onclick="aoResetFilters()" style="padding:6px 14px;border:1px solid #CFE3F7;border-radius:7px;font-size:11px;background:#fff;cursor:pointer;color:#5A7FA8;">↺ Sıfırla</button>
+      <span id="ao-f-summary" style="margin-left:auto;font-size:11px;color:#5A7FA8;font-family:'DM Mono',monospace;"></span>
+    </div>
+
+    <!-- Tablo -->
+    <div style="background:#fff;border:1px solid #DDEEFF;border-radius:10px;overflow:hidden;margin-bottom:16px;">
+      <div style="overflow-x:auto;max-height:60vh;overflow-y:auto;">
+        <table style="width:100%;border-collapse:collapse;min-width:900px;">
+          <thead style="position:sticky;top:0;z-index:10;">
+            <tr style="background:#0B1F3A;color:#fff;">
+              <th style="padding:10px 12px;text-align:center;font-size:11px;width:40px;">#</th>
+              <th style="padding:10px 12px;text-align:left;font-size:11px;">Klasman</th>
+              <th style="padding:10px 12px;text-align:center;font-size:11px;">Adet</th>
+              <th style="padding:10px 12px;text-align:center;font-size:11px;">Kontrol Süresi<br><span style="opacity:.6;font-weight:400">(sn/adet)</span></th>
+              <th style="padding:10px 12px;text-align:right;font-size:11px;">Standart Süre</th>
+              <th style="padding:10px 12px;text-align:right;font-size:11px;">Gerçekleşen Süre</th>
+              <th style="padding:10px 12px;text-align:center;font-size:11px;">Ort. Kontrol<br><span style="opacity:.6;font-weight:400">(sn/adet)</span></th>
+              <th style="padding:10px 12px;text-align:center;font-size:11px;">Başlangıç</th>
+              <th style="padding:10px 12px;text-align:center;font-size:11px;">Bitiş</th>
+              <th style="padding:10px 12px;text-align:center;font-size:11px;">Oran<br><span style="opacity:.6;font-weight:400">(Std./Ger.)</span></th>
+            </tr>
+          </thead>
+          <tbody id="ao-tablo-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Not -->
+    <div style="margin-bottom:20px;padding:10px 14px;background:#FFF8E1;border:1px solid #FFE082;border-radius:8px;font-size:10px;color:#5A7FA8;line-height:1.8;" class="no-print">
+      <strong style="color:#F57F17;">ℹ️</strong>
+      Standart = (Kontrol Süresi × Adet) + İstasyon &nbsp;|&nbsp;
+      Gerçekleşen = Başlangıç–Bitiş farkı &nbsp;|&nbsp;
+      Ort. Kontrol = Gerçekleşen ÷ Adet &nbsp;|&nbsp;
+      Oran = Standart ÷ Gerçekleşen × 100 &nbsp;|&nbsp;
+      <span style="color:#00897B;">✓ hedef</span> = Ort. ≤ Standart kontrol süresi
+    </div>
+
+
+  </div><!-- /max-width container -->
+</div><!-- /analiz-overlay -->
+
+<style>
+@keyframes ao-gspin { to { transform: rotate(360deg); } }
+@media print {
+  #analiz-overlay .no-print, #analiz-overlay-header button, #ao-gemini-wrap { display: none !important; }
+}
+</style>
+
+<script>
+// ══════════════════════════════════════════
+// ANALİZ OVERLAY — Tam Ekran Sayfa Sistemi
+// ══════════════════════════════════════════
+
+var _aoData        = [];      // tumKayitlar
+var _aoInspector   = null;    // inspector nesnesi
+var _aoHedef       = 100;
+
+var AO_LS_KEY = 'gemini_api_key_perf_panel';
+
+function openAnalizOverlay(inspData, inspObj, hedef) {
+  _aoData      = inspData;
+  _aoInspector = inspObj;
+  _aoHedef     = hedef || 100;
+
+  // Başlık
+  document.getElementById('analiz-overlay-title').textContent = '📊 ' + inspObj.ins + ' — Detaylı Performans';
+
+  // Stats
+  _aoRenderStats();
+
+  // Klasman filtre doldur
+  var klSel = document.getElementById('ao-f-klasman');
+  klSel.innerHTML = '<option value="">Tümü</option>';
+  var klList = [...new Set(_aoData.map(function(k){ return k.klasman; }))];
+  klList.forEach(function(k) {
+    var o = document.createElement('option'); o.value = k; o.textContent = k; klSel.appendChild(o);
+  });
+
+  // Filtreleri sıfırla
+  document.getElementById('ao-f-klasman').value  = '';
+  document.getElementById('ao-f-tarih').value    = '';
+  document.getElementById('ao-f-minadet').value  = 0;
+  document.getElementById('ao-f-sort').value     = '';
+
+  // Gemini kayıtlı key yükle
+  try {
+    var savedKey = localStorage.getItem(AO_LS_KEY) || '';
+    if (savedKey) document.getElementById('ao-gkey').value = savedKey;
+  } catch(e) {}
+
+  // Sonuçları sıfırla
+  document.getElementById('ao-gresult').style.display  = 'none';
+  document.getElementById('ao-gerror').style.display   = 'none';
+  document.getElementById('ao-goutput').textContent    = '';
+  document.getElementById('ao-gemini-panel').style.display = 'none';
+  document.getElementById('ao-gemini-badge').textContent   = 'Kapalı';
+  document.getElementById('ao-gemini-chevron').style.transform = '';
+
+  // Tabloyu render et
+  aoApplyFilters();
+
+  // Overlay'i aç
+  var ov = document.getElementById('analiz-overlay');
+  ov.style.display = 'block';
+  ov.scrollTop = 0;
+
+  // Body scroll kilitle
+  document.body.style.overflow = 'hidden';
+}
+
+function closeAnalizOverlay() {
+  document.getElementById('analiz-overlay').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+// ── Stat Kartlar ──
+function _aoRenderStats() {
+  var totalAdet  = _aoData.reduce(function(s,k){ return s + k.adet; }, 0);
+  var totalStd   = _aoData.reduce(function(s,k){ return s + k.standartSure; }, 0);
+  var totalFiili = _aoData.reduce(function(s,k){ return s + k.kayitFiiliSure; }, 0);
+  var hamPerf    = _aoInspector.genelHizPerf || 0;
+  var duzPerf    = Math.round(hamPerf * (100 / _aoHedef));
+  var overtimeDk = Math.round((_aoInspector.toplamMesaistiSaniye || 0) / 60);
+
+  function perfColor(p){ return p >= 95 ? '#00897B' : p >= 85 ? '#1565C0' : p >= 70 ? '#F57F17' : '#C62828'; }
+
+  var cards = [
+    ['📦','TOPLAM ADET',   String(totalAdet), 'var(--navy)'],
+    ['⏱','STANDART SÜRE',  _aoFmtSn(totalStd), 'var(--navy)'],
+    ['🕐','GERÇEKLEŞEN',   totalFiili > 0 ? _aoFmtSn(totalFiili) : '—', totalFiili > 0 ? '#00897B' : '#5A7FA8'],
+    ['📅','MESAİ SÜRESİ',  _aoFmtSn(_aoInspector.mesaiSure||0) + (overtimeDk > 0 ? ' (+'+overtimeDk+'dk 🌙)' : ''), overtimeDk > 0 ? '#E65100' : 'var(--navy)'],
+    ['📊','DÜZ. PERFORMANS', duzPerf + '%', perfColor(duzPerf)]
+  ];
+  document.getElementById('ao-stats-grid').innerHTML = cards.map(function(c){
+    return '<div style="background:#fff;border:1px solid #DDEEFF;border-radius:10px;padding:14px 8px;text-align:center;">'
+      + '<div style="font-size:18px;margin-bottom:4px;">' + c[0] + '</div>'
+      + '<div style="font-size:18px;font-weight:700;color:' + c[3] + ';font-family:\'DM Mono\',monospace;line-height:1.2;">' + c[2] + '</div>'
+      + '<div style="font-size:9px;color:#5A7FA8;text-transform:uppercase;letter-spacing:.6px;margin-top:4px;">' + c[1] + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+// ── Yardımcı: Süre Format ──
+function _aoFmtSn(sn) {
+  if (!sn || sn <= 0) return '—';
+  var s = Math.round(sn), h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sc = s%60;
+  return h > 0 ? h+'s '+String(m).padStart(2,'0')+'d' : m > 0 ? m+'d '+String(sc).padStart(2,'0')+'sn' : sc+'sn';
+}
+function _aoFmtTarih(d) {
+  if (!d) return '—';
+  var dt = (d instanceof Date) ? d : new Date(d);
+  if (isNaN(dt.getTime())) return '—';
+  return dt.toLocaleDateString('tr-TR',{day:'2-digit',month:'2-digit'}) + ' ' + dt.toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'});
+}
+function _aoPerfClass(p) { return p >= 100 ? '#00897B' : p >= 80 ? '#1565C0' : p >= 60 ? '#F57F17' : '#C62828'; }
+
+// ── Filtre & Tablo ──
+function aoApplyFilters() {
+  var kf = document.getElementById('ao-f-klasman').value;
+  var tf = document.getElementById('ao-f-tarih').value;
+  var mf = parseInt(document.getElementById('ao-f-minadet').value) || 0;
+  var sf = document.getElementById('ao-f-sort').value;
+
+  var list = _aoData.filter(function(k) {
+    if (kf && k.klasman !== kf) return false;
+    if (mf > 0 && k.adet < mf) return false;
+    if (tf === 'withdate' && !k.tarihGecerli) return false;
+    if (tf === 'nodate'   &&  k.tarihGecerli) return false;
+    return true;
+  });
+
+  if (sf === 'adet-desc') list.sort(function(a,b){ return b.adet - a.adet; });
+  else if (sf === 'adet-asc')  list.sort(function(a,b){ return a.adet - b.adet; });
+  else if (sf === 'ort-desc')  list.sort(function(a,b){ return (b.ortalamaKontrolSn||0)-(a.ortalamaKontrolSn||0); });
+  else if (sf === 'tarih-asc') list.sort(function(a,b){ return new Date(a.baslangic||0)-new Date(b.baslangic||0); });
+
+  var fAdet = list.reduce(function(s,k){ return s+k.adet; }, 0);
+  var fStd  = list.reduce(function(s,k){ return s+k.standartSure; }, 0);
+  document.getElementById('ao-f-summary').textContent = list.length + ' kayıt · ' + fAdet + ' adet · ' + _aoFmtSn(fStd);
+
+  // Gruplama
+  var gruplar = {};
+  list.forEach(function(k){ if (!gruplar[k.klasman]) gruplar[k.klasman] = []; gruplar[k.klasman].push(k); });
+
+  var html = '', idx = 0;
+  Object.keys(gruplar).forEach(function(kAd) {
+    var kayitlar = gruplar[kAd];
+    var gAdet  = kayitlar.reduce(function(s,k){ return s+k.adet; }, 0);
+    var gStd   = kayitlar.reduce(function(s,k){ return s+k.standartSure; }, 0);
+    var gFiili = kayitlar.reduce(function(s,k){ return s+k.kayitFiiliSure; }, 0);
+    var gOrt   = gAdet > 0 && gFiili > 0 ? Math.round(gFiili / gAdet) : null;
+
+    html += '<tr style="background:#0B1F3A;color:#fff;"><td colspan="10" style="padding:8px 14px;font-size:12px;font-weight:700;">'
+      + '📦 ' + kAd + ' <span style="font-weight:400;opacity:.7;font-size:11px;">'
+      + kayitlar.length + ' kayıt · ' + gAdet + ' adet · ' + _aoFmtSn(gStd)
+      + (gFiili > 0 ? ' · ' + _aoFmtSn(gFiili) + ' gerçekleşen' : '')
+      + (gOrt ? ' · <strong style="color:#FFD700">ort. ' + gOrt + 'sn/adet</strong>' : '')
+      + '</span></td></tr>';
+
+    kayitlar.forEach(function(k, i) {
+      idx++;
+      var oran    = k.kayitFiiliSure && k.standartSure ? Math.round((k.standartSure / k.kayitFiiliSure) * 100) : null;
+      var ortSn   = k.ortalamaKontrolSn;
+      var ortColor = ortSn === null ? '#5A7FA8' : ortSn <= k.kontrolAdetSuresi ? '#00897B' : ortSn <= k.kontrolAdetSuresi * 1.2 ? '#F57F17' : '#C62828';
+      var bg = i % 2 === 0 ? '#F9FBFF' : '#fff';
+      html += '<tr style="background:' + bg + ';">'
+        + '<td style="color:#5A7FA8;font-family:monospace;text-align:center;">' + idx + '</td>'
+        + '<td style="font-weight:600;color:#0B1F3A;">' + k.klasman + '</td>'
+        + '<td style="font-weight:700;font-size:14px;text-align:center;">' + k.adet + '</td>'
+        + '<td style="color:#1565C0;font-family:monospace;text-align:center;">' + k.kontrolAdetSuresi + 'sn</td>'
+        + '<td style="text-align:right;font-family:monospace;"><span style="color:#1565C0;">' + _aoFmtSn(k.kontrolAdetSuresi * k.adet) + '</span>'
+          + (k.istasyonSuresi > 0 ? '<div style="font-size:10px;color:#5A7FA8;">+ ' + _aoFmtSn(k.istasyonSuresi) + ' ist.</div>' : '')
+          + '<div style="font-weight:700;">' + _aoFmtSn(k.standartSure) + '</div></td>'
+        + '<td style="font-family:monospace;color:' + (k.kayitFiiliSure > 0 ? '#00897B' : '#5A7FA8') + ';text-align:right;">' + _aoFmtSn(k.kayitFiiliSure) + '</td>'
+        + '<td style="font-family:monospace;font-weight:700;color:' + ortColor + ';text-align:center;">'
+          + (ortSn !== null ? ortSn + 'sn<div style="font-size:9px;font-weight:400;">' + (ortSn <= k.kontrolAdetSuresi ? '✓ hedef' : '↑ hedefin üstü') + '</div>' : '—<div style="font-size:9px;color:#5A7FA8;">tarih yok</div>')
+          + '</td>'
+        + '<td style="font-size:11px;color:#5A7FA8;text-align:center;">' + (k.tarihGecerli && k.baslangic ? _aoFmtTarih(k.baslangic) : '—') + '</td>'
+        + '<td style="font-size:11px;color:#5A7FA8;text-align:center;">' + (k.tarihGecerli && k.bitis ? _aoFmtTarih(k.bitis) : '—') + '</td>'
+        + '<td style="font-family:monospace;font-weight:700;text-align:center;">'
+          + (oran !== null ? '<span style="color:' + _aoPerfClass(oran) + ';">' + oran + '%</span><div style="font-size:9px;font-weight:400;color:' + _aoPerfClass(oran) + ';">' + (oran >= 100 ? '✓ hedef içi' : '↓ hedef altı') + '</div>' : '<span style="color:#5A7FA8;">—</span>')
+          + '</td>'
+        + '</tr>';
+    });
+  });
+
+  document.getElementById('ao-tablo-body').innerHTML = html || '<tr><td colspan="10" style="padding:24px;text-align:center;color:#5A7FA8;">Filtreye uyan kayıt bulunamadı.</td></tr>';
+}
+
+function aoResetFilters() {
+  document.getElementById('ao-f-klasman').value = '';
+  document.getElementById('ao-f-tarih').value   = '';
+  document.getElementById('ao-f-minadet').value = 0;
+  document.getElementById('ao-f-sort').value    = '';
+  aoApplyFilters();
+}
+
+// ── Gemini Toggle ──
+function aoGeminiToggle() {
+  var panel   = document.getElementById('ao-gemini-panel');
+  var isOpen  = panel.style.display !== 'none';
+  panel.style.display = isOpen ? 'none' : 'block';
+  document.getElementById('ao-gemini-chevron').style.transform = isOpen ? '' : 'rotate(90deg)';
+  document.getElementById('ao-gemini-badge').textContent       = isOpen ? 'Kapalı' : 'Açık';
+  document.getElementById('ao-gemini-bar').style.borderRadius  = isOpen ? '12px' : '12px 12px 0 0';
+}
+
+// ── Gemini API Key ──
+function aoGkeyToggleEye() {
+  var inp = document.getElementById('ao-gkey');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+function aoGkeySave() {
+  var val = document.getElementById('ao-gkey').value.trim();
+  if (!val) { aoSetKeyStatus('⚠️ Boş bırakmayın.', '#E65100'); return; }
+  if (val.length < 10) { aoSetKeyStatus('⚠️ Geçersiz format. API anahtarı çok kısa.', '#E65100'); return; }
+  try { localStorage.setItem(AO_LS_KEY, val); aoSetKeyStatus('✅ Anahtar kaydedildi!', '#00897B'); }
+  catch(e) { aoSetKeyStatus('❌ Kayıt başarısız: ' + e.message, '#C62828'); }
+}
+function aoGkeyDelete() {
+  try { localStorage.removeItem(AO_LS_KEY); } catch(e) {}
+  document.getElementById('ao-gkey').value = '';
+  aoSetKeyStatus('🗑 Anahtar silindi.', '#5A7FA8');
+}
+function aoSetKeyStatus(msg, color) {
+  var el = document.getElementById('ao-gkey-status');
+  el.textContent = msg; el.style.color = color;
+  setTimeout(function(){ if (el.textContent === msg) el.textContent = ''; }, 4000);
+}
+
+// ── Gemini Hızlı Butonlar ──
+var _AO_Q_PROMPTS = {
+  genel:   'Bu çalışanın genel performansını değerlendir. Güçlü yönleri, zayıf yönleri ve dikkat çeken noktaları belirt.',
+  guclu:   'Bu çalışanın güçlü ve zayıf yönlerini analiz et. Hangi klasmanlarda iyi, hangilerinde daha düşük performans gösteriyor?',
+  trend:   'Zaman bazlı bir analiz yap. Kayıt tarihlerine göre performans eğilimi var mı? Mesai kullanımı nasıl?',
+  klasman: 'Klasman bazında karşılaştırmalı analiz yap. Hangi klasmanlarda standart süreye uyuluyor, hangilerinde hedefin üstüne çıkılıyor?',
+  oneri:   'Bu çalışan için somut iyileştirme önerileri sun. Hangi alanlara odaklanması gerekiyor?',
+  mesai:   'Mesai süresi ve mesai üstü durumunu analiz et. Yoğunluk ne zaman en yüksek? Mesai yönetimi nasıl?'
+};
+var _AO_Q_TITLES = {
+  genel:'📊 Genel Performans', guclu:'💪 Güçlü/Zayıf Yönler', trend:'📈 Trend Analizi',
+  klasman:'👔 Klasman Karşılaştırma', oneri:'💡 İyileştirme Önerileri', mesai:'🌙 Mesai Analizi'
+};
+
+function aoCallGeminiQuick(tip) {
+  aoCallGemini(_AO_Q_PROMPTS[tip], _AO_Q_TITLES[tip]);
+}
+function aoCallGeminiCustom() {
+  var q = document.getElementById('ao-gcustom').value.trim();
+  if (!q) { alert('Lütfen bir soru girin.'); return; }
+  document.getElementById('ao-gcustom').value = '';
+  aoCallGemini(q, '💬 Özel Analiz');
+}
+function aoClearResult() {
+  document.getElementById('ao-gresult').style.display = 'none';
+  document.getElementById('ao-goutput').textContent = '';
+}
+
+function _aoDataSummary() {
+  if (!_aoData.length || !_aoInspector) return 'Veri yok.';
+  var totalAdet  = _aoData.reduce(function(s,k){ return s+k.adet; }, 0);
+  var totalStd   = _aoData.reduce(function(s,k){ return s+k.standartSure; }, 0);
+  var totalFiili = _aoData.reduce(function(s,k){ return s+k.kayitFiiliSure; }, 0);
+  var duzPerf    = Math.round((_aoInspector.genelHizPerf||0) * (100 / _aoHedef));
+  var mesaiDk    = Math.round((_aoInspector.toplamMesaistiSaniye||0) / 60);
+  var gruplar = {};
+  _aoData.forEach(function(k) {
+    if (!gruplar[k.klasman]) gruplar[k.klasman] = {adet:0,standartSure:0,kayitFiiliSure:0,count:0,ortSums:[]};
+    gruplar[k.klasman].adet += k.adet;
+    gruplar[k.klasman].standartSure += k.standartSure;
+    gruplar[k.klasman].kayitFiiliSure += k.kayitFiiliSure;
+    gruplar[k.klasman].count++;
+    if (k.ortalamaKontrolSn) gruplar[k.klasman].ortSums.push(k.ortalamaKontrolSn);
+  });
+  var kLines = '';
+  Object.keys(gruplar).forEach(function(k) {
+    var v = gruplar[k];
+    var oran = v.kayitFiiliSure > 0 ? Math.round((v.standartSure/v.kayitFiiliSure)*100) : null;
+    var ortSn = v.ortSums.length > 0 ? Math.round(v.ortSums.reduce(function(a,b){return a+b;},0)/v.ortSums.length) : null;
+    kLines += '  - '+k+': '+v.adet+' adet, '+v.count+' kayıt, standart '+_aoFmtSn(v.standartSure)
+      +', gerçekleşen '+_aoFmtSn(v.kayitFiiliSure)
+      +(oran ? ' oran:'+oran+'%' : '')+(ortSn ? ' ort.kontrol:'+ortSn+'sn/adet' : '')+'\n';
+  });
+  return 'Çalışan: '+_aoInspector.ins+'\n'
+    +'Toplam Adet: '+totalAdet+'\n'
+    +'Standart Süre: '+_aoFmtSn(totalStd)+'\n'
+    +'Gerçekleşen Süre: '+(totalFiili>0?_aoFmtSn(totalFiili):'Veri yok')+'\n'
+    +'Mesai Süresi: '+_aoFmtSn(_aoInspector.mesaiSure||0)+(mesaiDk>0?' (Mesai üstü: '+mesaiDk+'dk)':'')+'\n'
+    +'Düzeltilmiş Performans: '+duzPerf+'% (Hedef: '+_aoHedef+'%)\n'
+    +'Ham Hız Performansı: '+Math.round(_aoInspector.genelHizPerf||0)+'%\n\n'
+    +'Klasman Bazlı Özet:\n'+kLines
+    +'Toplam Klasman Sayısı: '+Object.keys(gruplar).length+'\n'
+    +'Tarihli Kayıt: '+_aoData.filter(function(k){return k.tarihGecerli;}).length+'\n'
+    +'Tarihi Olmayan: '+_aoData.filter(function(k){return !k.tarihGecerli;}).length;
+}
+
+function aoCallGemini(userPrompt, title) {
+  var key = '';
+  try { key = localStorage.getItem(AO_LS_KEY) || ''; } catch(e) {}
+  if (!key) key = (document.getElementById('ao-gkey').value || '').trim();
+  if (!key) { aoShowErr('Lütfen önce Gemini API anahtarınızı girin ve kaydedin.'); return; }
+
+  var fullPrompt = 'Sen bir üretim performans analisti asistanısın. Aşağıdaki inspection/kalite kontrol çalışanına ait performans verileri sana verilmiştir. Bu verileri analiz et ve kullanıcının sorusuna yanıt ver.\n\n'
+    + 'PERFORMANS VERİLERİ:\n' + _aoDataSummary() + '\n\n'
+    + 'KULLANICI SORUSU: ' + userPrompt + '\n\n'
+    + 'Yanıt verirken:\n- Somut verilere dayandır\n- Sayısal referanslar ver\n- Türkçe yaz\n- Açık ve anlaşılır ol\n- Varsa kritik bulgular için uyarı ver';
+
+  // Panel açık değilse aç
+  var panel = document.getElementById('ao-gemini-panel');
+  if (panel.style.display === 'none') aoGeminiToggle();
+
+  // Loading göster
+  document.getElementById('ao-gresult').style.display = 'block';
+  document.getElementById('ao-gresult-title').textContent = title || 'Analiz ediliyor...';
+  document.getElementById('ao-gloading').style.display = 'block';
+  document.getElementById('ao-goutput').style.display = 'none';
+  document.getElementById('ao-goutput').textContent = '';
+  document.getElementById('ao-gerror').style.display = 'none';
+  setTimeout(function(){
+    var el = document.getElementById('ao-gresult');
+    if (el) el.scrollIntoView({behavior:'smooth', block:'nearest'});
+  }, 100);
+
+    var modelSel = document.getElementById('ao-gmodel');
+  var modelId = (modelSel ? modelSel.value : null) || 'gemini-2.0-flash';
+  var url = 'https://generativelanguage.googleapis.com/v1/models/' + modelId + ':generateContent?key=' + encodeURIComponent(key);
+  fetch(url, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      contents: [{parts:[{text: fullPrompt}]}],
+      generationConfig: {temperature: 0.7, maxOutputTokens: 1500}
+    })
+  })
+  .then(function(resp) {
+    if (!resp.ok) return resp.json().then(function(e){ throw new Error(e && e.error && e.error.message ? e.error.message : 'HTTP ' + resp.status); });
+    return resp.json();
+  })
+  .then(function(data) {
+    var text = data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text;
+    if (!text) throw new Error('Gemini boş yanıt döndürdü.');
+    document.getElementById('ao-gloading').style.display = 'none';
+    document.getElementById('ao-goutput').style.display = 'block';
+    document.getElementById('ao-goutput').textContent = text;
+  })
+  .catch(function(e) {
+    document.getElementById('ao-gloading').style.display = 'none';
+    document.getElementById('ao-gresult').style.display = 'none';
+    aoShowErr('API Hatası: ' + e.message + (e.message.indexOf('API_KEY') > -1 ? ' — API anahtarınızı kontrol edin.' : ''));
+  });
+}
+
+function aoShowErr(msg) {
+  document.getElementById('ao-gerror').style.display = 'block';
+  document.getElementById('ao-gerror-msg').textContent = msg;
+}
+
+// Excel export (overlay için)
+function exportInspectorDetailFromOverlay() {
+  if (typeof exportInspectorDetail === 'function') exportInspectorDetail();
+}
+</script>
+
 </body>
 </html>
