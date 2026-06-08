@@ -1867,11 +1867,10 @@ let perfData = null;
       performansData = restorePerformansDateObjects(perfData.performansData);
       console.log('✅ Performans verisi yüklendi:', performansData.length, 'inspector');
       const _hedef = Math.max(1, parseFloat(document.getElementById('inp-verimlilik')?.value) || 100);
-      performansData.forEach(row => {
-        if (row.verimlilikPerf === undefined || row.verimlilikPerf === null) {
-          row.verimlilikPerf = row.genelHizPerf !== null && row.genelHizPerf !== undefined
-            ? Math.round(row.genelHizPerf * (100 / _hedef)) : null;
-        }
+     performansData.forEach(row => {
+  const _hedef = Math.max(1, parseFloat(document.getElementById('inp-verimlilik')?.value) || 100);
+  row.verimlilikPerf = row.genelHizPerf !== null && row.genelHizPerf !== undefined
+    ? Math.round(row.genelHizPerf * (100 / _hedef)) : null;
 });
     }
   } catch(e) {
@@ -2975,10 +2974,9 @@ async function pullPerformansFromSheets(silent = false) {
       performansData = restorePerformansDateObjects(data.performansData);
       const _h2 = Math.max(1, parseFloat(document.getElementById('inp-verimlilik')?.value) || 100);
 performansData.forEach(row => {
-  if (row.verimlilikPerf === undefined || row.verimlilikPerf === null) {
-    row.verimlilikPerf = row.genelHizPerf !== null && row.genelHizPerf !== undefined
-      ? Math.round(row.genelHizPerf * (100 / _h2)) : null;
-  }
+  const _h2 = Math.max(1, parseFloat(document.getElementById('inp-verimlilik')?.value) || 100);
+  row.verimlilikPerf = row.genelHizPerf !== null && row.genelHizPerf !== undefined
+    ? Math.round(row.genelHizPerf * (100 / _h2)) : null;
 });
       saveData();
       renderDashboard();
@@ -3504,6 +3502,11 @@ async function clearDashboardData() {
   currentDashboardPage = 1;
   saveData();
   renderDashboard();
+  const _hm = Math.max(1, parseFloat(document.getElementById('inp-verimlilik')?.value) || 100);
+performansData.forEach(row => {
+  row.verimlilikPerf = row.genelHizPerf !== null && row.genelHizPerf !== undefined
+    ? Math.round(row.genelHizPerf * (100 / _hm)) : null;
+});
   renderPerfTabloFromData();
   updateSidebar();
   renderTopInspectors();
