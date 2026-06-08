@@ -4929,6 +4929,27 @@ function exportInspectorDetail() {
 // ────────────────────────────
 let klFilter = 'all'; // 'all' | 'done' | 'undone'
 
+// ─── OTOMATİK SHEETS PUSH (debounce 1.5sn) ───
+let _klasmanPushTimer = null;
+function autoSaveAndPushKlasmanlar() {
+  saveData();
+  clearTimeout(_klasmanPushTimer);
+  _klasmanPushTimer = setTimeout(() => {
+    const url   = appConfig.sheetsWebAppUrl;
+    const token = appConfig.sheetsApiToken;
+    if (!url || !token) return;
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'setKlasmanlar', token, klasmanlar, savedAt: new Date().toISOString() }),
+      mode: 'no-cors'
+    }).then(() => {
+      console.log('☁️ Klasmanlar Sheets\'e otomatik gönderildi');
+      showSuccessMessage('☁️ Klasman değişikliği Sheets\'e senkronize edildi');
+    }).catch(err => console.warn('Klasman oto-push hatası:', err.message));
+  }, 1500);
+}
+
 function isKlasmanTamamlandi(k) {
   // Manuel işaretleme öncelikli; işaretlenmemişse false
   return k.tamamlandi === true;
@@ -4938,7 +4959,7 @@ function toggleKlasmanTamamlandi(kId) {
   const k = klasmanlar.find(x => x.id === kId);
   if (!k) return;
   k.tamamlandi = !k.tamamlandi;
-  saveData();
+  autoSaveAndPushKlasmanlar();
   renderListe();
   renderEditor();
 }
@@ -5183,6 +5204,7 @@ function updateUrunKontrol(kId, val) {
   const k = klasmanlar.find(x => x.id === kId);
   if (!k) return;
   k.urunKontrolSuresi = parseFloat(val) || 0;
+  autoSaveAndPushKlasmanlar();
   renderEditor(); 
   renderListe();
 }
@@ -5192,6 +5214,7 @@ function updateIst(kId,iId,alan,val){
   const ist=k&&k.istasyonlar.find(i=>i.id===iId);
   if(!ist) return;
   if(alan==='sure') ist.sure=parseFloat(val)||0; else ist.ad=val;
+  autoSaveAndPushKlasmanlar();
   renderEditor(); renderListe();
 }
 
@@ -5199,6 +5222,7 @@ function updateKlasmanAd(kId, val) {
   const k = klasmanlar.find(x => x.id === kId);
   if (!k || !val.trim()) return;
   k.ad = val.trim();
+  autoSaveAndPushKlasmanlar();
   // Kartları güncelle
   renderListe();
   // Editör başlığını da güncelle
@@ -5210,6 +5234,7 @@ function updateKlasmanIcon(kId, ic) {
   const k = klasmanlar.find(x => x.id === kId);
   if (!k) return;
   k.icon = ic;
+  autoSaveAndPushKlasmanlar();
   renderEditor(); renderListe();
 }
 
@@ -5217,6 +5242,7 @@ function deleteIst(kId,iId){
   const k=klasmanlar.find(x=>x.id===kId);
   if(!k) return;
   k.istasyonlar=k.istasyonlar.filter(i=>i.id!==iId);
+  autoSaveAndPushKlasmanlar();
   renderEditor(); renderListe();
 }
 
@@ -5277,6 +5303,7 @@ function addIstasyon(kId){
   if(!k) return;
   const nid=Math.max(0,...k.istasyonlar.map(i=>i.id))+1;
   k.istasyonlar.push({id:nid,ad:'Yeni İstasyon',sure:60});
+  autoSaveAndPushKlasmanlar();
   renderEditor(); renderListe();
 }
 
@@ -5298,6 +5325,7 @@ function addKlasman(){
   closeModal();
   secilenId=yeni.id;
   sayfa=Math.ceil(filtered().length/KL_PER_PAGE);
+  autoSaveAndPushKlasmanlar();
   renderListe(); renderEditor();
 }
 
