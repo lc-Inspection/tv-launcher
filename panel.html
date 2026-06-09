@@ -895,6 +895,31 @@ label { font-size: 12px; font-weight: 500; color: var(--muted); display: block; 
 .pw-btn { width: 100%; padding: 10px; background: var(--blue2); color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background .15s; }
 .pw-btn:hover { background: var(--blue); }
 
+/* ─── CİHAZ YETKİSİZ OVERLAY ─── */
+.device-blocked-overlay {
+  position: fixed; inset: 0; background: rgba(11,31,58,.85);
+  z-index: 10000; display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(6px);
+}
+.device-blocked-box {
+  background: var(--white); border-radius: 18px;
+  padding: 38px 40px; width: 420px; text-align: center;
+  box-shadow: 0 28px 70px rgba(11,31,58,.4);
+  border: 1px solid #FFCDD2;
+  animation: popIn .22s ease;
+}
+.device-blocked-icon { font-size: 52px; margin-bottom: 14px; }
+.device-blocked-title { font-size: 18px; font-weight: 700; color: var(--red); margin-bottom: 8px; }
+.device-blocked-sub { font-size: 13px; color: var(--muted); margin-bottom: 20px; line-height: 1.6; }
+.device-blocked-name {
+  display: inline-block; background: #FFF3E0; border: 1px solid #FFCC80;
+  border-radius: 8px; padding: 8px 18px; font-family: 'DM Mono', monospace;
+  font-size: 15px; font-weight: 600; color: #E65100; letter-spacing: 1px;
+  margin-bottom: 20px;
+}
+.device-blocked-info { font-size: 11px; color: var(--muted2); background: var(--offwhite); border-radius: 8px; padding: 10px 14px; line-height: 1.8; }
+.device-blocked-info strong { color: var(--navy); }
+
 /* ─── SHEETS BANNER ─── */
 .sheets-banner {
   background: linear-gradient(135deg, #0F9D58 0%, #34A853 100%);
@@ -949,6 +974,21 @@ label { font-size: 12px; font-weight: 500; color: var(--muted); display: block; 
 </style>
 </head>
 <body>
+
+<!-- CİHAZ YETKİSİZ OVERLAY -->
+<div class="device-blocked-overlay" id="device-blocked-overlay" style="display:none">
+  <div class="device-blocked-box">
+    <div class="device-blocked-icon">🚫</div>
+    <div class="device-blocked-title">Bu Cihaz Yetkisiz</div>
+    <div class="device-blocked-sub">Bu bilgisayar, panele erişim için yetkilendirilmemiş.<br>Erişim için sistem yöneticisiyle iletişime geçin.</div>
+    <div class="device-blocked-name" id="device-blocked-name">—</div>
+    <div class="device-blocked-info">
+      <strong>Yetkili cihaz eklemek için:</strong><br>
+      Yetkili bir cihazdan panele giriş yapın →<br>
+      Klasman Yönetimi → Ayarlar → Yetkili Cihazlar bölümünden bu cihazı ekleyin.
+    </div>
+  </div>
+</div>
 
 <!-- PASSWORD MODAL -->
 <div class="pw-overlay" id="pw-overlay" style="display:none">
@@ -1239,6 +1279,45 @@ label { font-size: 12px; font-weight: 500; color: var(--muted); display: block; 
             <code id="klasman-pw-display" style="background:var(--border2);padding:2px 6px;border-radius:4px;font-family:'DM Mono',monospace">****</code>
             <button onclick="changeKlasmanPwPrompt()" style="margin-left:10px;padding:3px 10px;background:#E65100;color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer">✏️ Klasman Şifresini Değiştir</button>
             <span style="margin-left:10px;font-size:10px;color:var(--muted)">📊 Sheets Config'e otomatik senkronize edilir</span>
+          </div>
+
+          <!-- YETKİLİ CİHAZLAR YÖNETİMİ -->
+          <div style="margin-top:16px;padding:16px 16px 14px;background:var(--lblue3);border:1px solid var(--lblue);border-radius:10px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+              <span style="font-size:18px">🖥️</span>
+              <strong style="font-size:13px;color:var(--navy)">Yetkili Cihaz Yönetimi</strong>
+              <span style="font-size:11px;color:var(--muted);margin-left:4px">— Boş bırakılırsa tüm cihazlar erişebilir</span>
+            </div>
+
+            <!-- Bu Cihazın Adını Kaydet -->
+            <div style="background:#fff;border:1px solid var(--border2);border-radius:8px;padding:12px 14px;margin-bottom:12px">
+              <label style="font-size:11px;font-weight:600;color:var(--navy);display:block;margin-bottom:6px">💾 Bu Tarayıcının Cihaz Adı</label>
+              <div style="display:flex;gap:8px;align-items:center">
+                <input type="text" id="my-device-name-input" placeholder="Örn: INSPECTIONIZLEM veya HARUN.KILIC"
+                  style="flex:1;font-family:'DM Mono',monospace;font-size:13px;text-transform:uppercase;letter-spacing:1px">
+                <button onclick="saveMyDeviceName()" style="padding:7px 14px;background:var(--blue2);color:#fff;border:none;border-radius:7px;font-size:12px;cursor:pointer;font-weight:600;white-space:nowrap">💾 Kaydet</button>
+              </div>
+              <div style="font-size:10px;color:var(--muted);margin-top:5px">Windows bilgisayar adınızı buraya girin (Sistem → Bilgisayar Adı). Bu değer bu tarayıcıya kaydedilir.</div>
+            </div>
+
+            <!-- Cihaz Ekle -->
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+              <input type="text" id="yeni-cihaz-input" placeholder="Yetkili bilgisayar adı (örn: HARUN.KILIC)"
+                style="flex:1;font-family:'DM Mono',monospace;font-size:13px;text-transform:uppercase;letter-spacing:1px"
+                onkeydown="if(event.key==='Enter')addYetkiliCihaz()">
+              <button onclick="addYetkiliCihaz()" style="padding:7px 16px;background:var(--green);color:#fff;border:none;border-radius:7px;font-size:12px;cursor:pointer;font-weight:600;white-space:nowrap">➕ Ekle</button>
+              <button onclick="addCurrentDevice()" style="padding:7px 14px;background:var(--navy);color:#fff;border:none;border-radius:7px;font-size:12px;cursor:pointer;font-weight:600;white-space:nowrap" title="Bu tarayıcının kayıtlı cihaz adını otomatik ekle">💻 Bu Cihazı Ekle</button>
+            </div>
+
+            <!-- Cihaz Listesi -->
+            <div id="yetkili-cihazlar-list">
+              <div style="font-size:12px;color:var(--muted);text-align:center;padding:14px 0">Yükleniyor...</div>
+            </div>
+
+            <div style="margin-top:10px;font-size:10px;color:var(--muted2);background:rgba(255,193,7,.08);border:1px solid rgba(255,193,7,.25);border-radius:6px;padding:8px 12px;line-height:1.7">
+              ⚠️ <strong style="color:var(--amber)">Dikkat:</strong> Listeye ekleme yaptıktan sonra yetkisiz cihazlar panele giremez.
+              Kendi cihazınızı listede tutmayı unutmayın. Değişiklikler Google Sheets Config'e otomatik kaydedilir.
+            </div>
           </div>
         </div>
       </div>
@@ -1717,14 +1796,16 @@ let animationEffect = 'slide'; // slide, fade, zoom, flip
 // APP CONFIG (Tüm Ayarlar)
 // ────────────────────────────
 const APP_CONFIG_KEY = 'lc_inspection_config';
-const DEFAULT_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbxiRUDxY9Xy8bGJAxuidTcp2TUwaYbu2p_oIW8HdM-pcySPusCcNX4GHuwsC7bDhZsSTA/exec';
+const DEFAULT_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbxsgUvwVueiOkvbzqJkmV3_Zzze7MgjpWbqXw9X3FG4Oou1YXfb9NC-TEk0eUvNtHHZjQ/exec';
 const DEFAULT_API_TOKEN  = 'lcw-secret-2024';
 let appConfig = {
   password: '',          // Panel giriş şifresi — Sheets Config'ten yüklenir, kodda saklanmaz
   klasmanPassword: '',   // Klasman Yönetimi şifresi — Sheets Config'ten yüklenir, kodda saklanmaz
   sheetsWebAppUrl: DEFAULT_SHEETS_URL,
   sheetsViewUrl: '',
-  sheetsApiToken: DEFAULT_API_TOKEN
+  sheetsApiToken: DEFAULT_API_TOKEN,
+  yetkiliCihazlar: [],   // Yetkili bilgisayar adları — boşsa kontrol yapılmaz (geriye dönük uyumluluk)
+  geminiApiKey: ''       // Gemini API anahtarı — Sheets Config'ten yüklenir
 };
 
 // Yeni bilgisayar tespiti: localStorage'da config hiç yoksa
@@ -1737,8 +1818,10 @@ async function pushConfigToSheets() {
   const token = appConfig.sheetsApiToken;
   if (!url || !token) return;
   try {
-    let geminiKey = '';
-    try { geminiKey = localStorage.getItem('gemini_api_key_perf_panel') || ''; } catch(e) {}
+    let geminiKey = appConfig.geminiApiKey || '';
+    if (!geminiKey) {
+      try { geminiKey = localStorage.getItem('gemini_api_key_perf_panel') || ''; } catch(e) {}
+    }
     await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
@@ -1748,7 +1831,8 @@ async function pushConfigToSheets() {
         config: {
           password: appConfig.password,
           klasmanPassword: appConfig.klasmanPassword,
-          geminiApiKey: geminiKey
+          geminiApiKey: geminiKey,
+          yetkiliCihazlar: appConfig.yetkiliCihazlar || []
         }
       }),
       mode: 'no-cors'
@@ -1817,8 +1901,13 @@ async function pullConfigFromSheets() {
     if (data.status === 'ok' && data.config) {
       if (data.config.password)        appConfig.password        = data.config.password;
       if (data.config.klasmanPassword) appConfig.klasmanPassword = data.config.klasmanPassword;
+      if (Array.isArray(data.config.yetkiliCihazlar)) {
+        appConfig.yetkiliCihazlar = data.config.yetkiliCihazlar;
+        renderYetkiliCihazlarUI();
+      }
       // Gemini API key varsa localStorage'a yaz ve input'a doldur
       if (data.config.geminiApiKey) {
+        appConfig.geminiApiKey = data.config.geminiApiKey;
         try { localStorage.setItem('gemini_api_key_perf_panel', data.config.geminiApiKey); } catch(e) {}
         const keyInput = document.getElementById('ao-gkey');
         if (keyInput) keyInput.value = data.config.geminiApiKey;
@@ -1840,6 +1929,11 @@ async function autoFetchOnStartup() {
 
   // Config (şifre) çek
   await pullConfigFromSheets();
+
+  // Cihaz adı inputunu doldur (eğer kayıtlıysa)
+  const myNameInput = document.getElementById('my-device-name-input');
+  if (myNameInput && !myNameInput.value) myNameInput.value = _getComputerName() || '';
+  renderYetkiliCihazlarUI();
 
   // Eğer daha önce hiç veri çekilmemişse (klasmanlar boş veya varsayılan 3'lü) Sheets'ten çek
   const isDefault = klasmanlar.length === 3 &&
@@ -1987,6 +2081,9 @@ let _pwMandatory = false;
 
 // Sayfa ilk açılışında şifre sor (henüz unlock olmadıysa)
 function initPasswordGate() {
+  // ── Cihaz yetki kontrolü ──
+  if (!_checkDeviceAuth()) return; // Yetkisizse engel overlay'i göster, devam etme
+
   if (!klasmanUnlocked) {
     // App shell gizli kalır — sadece login overlay görünür
     document.getElementById('pw-overlay').style.display = 'flex';
@@ -1996,6 +2093,118 @@ function initPasswordGate() {
     if (shell) shell.style.display = 'block';
     setTimeout(() => autoFetchOnStartup(), 600);
   }
+}
+
+// ── CİHAZ YETKİ KONTROLÜ ──────────────────────────────────────────────────────
+// Bilgisayar adını navigator.userAgent veya localStorage'daki kayıttan alır.
+// yetkiliCihazlar dizisi boşsa kontrol yapılmaz (geriye dönük uyumluluk).
+function _getComputerName() {
+  // localStorage'da elle kaydedilmiş isim varsa onu kullan
+  try {
+    const saved = localStorage.getItem('lc_device_name');
+    if (saved) return saved.trim();
+  } catch(e) {}
+  return '';
+}
+
+function _checkDeviceAuth() {
+  const liste = appConfig.yetkiliCihazlar || [];
+  if (liste.length === 0) return true; // Liiste boşsa herkese açık
+
+  const deviceName = _getComputerName();
+  if (!deviceName) {
+    // İsim tanımlı değil — engelle ve kullanıcıya bildir
+    const el = document.getElementById('device-blocked-name');
+    if (el) el.textContent = '(Cihaz adı tanımlı değil)';
+    const sub = document.querySelector('.device-blocked-sub');
+    if (sub) sub.innerHTML = 'Bu tarayıcıda kayıtlı cihaz adı bulunamadı.<br>Paneli açmadan önce cihaz adınızı tanımlamanız gerekiyor.';
+    document.getElementById('device-blocked-overlay').style.display = 'flex';
+    return false;
+  }
+
+  const normalized = deviceName.toUpperCase().trim();
+  const found = liste.some(c => String(c).toUpperCase().trim() === normalized);
+  if (!found) {
+    const el = document.getElementById('device-blocked-name');
+    if (el) el.textContent = deviceName;
+    document.getElementById('device-blocked-overlay').style.display = 'flex';
+    return false;
+  }
+  return true;
+}
+
+// Cihaz adını localStorage'a kaydet (ilk kurulumda veya değiştirilince çağrılır)
+function saveDeviceName(name) {
+  try { localStorage.setItem('lc_device_name', name.trim()); } catch(e) {}
+}
+
+// ── CİHAZ YÖNETİM UI ─────────────────────────────────────────────────────────
+function renderYetkiliCihazlarUI() {
+  const container = document.getElementById('yetkili-cihazlar-list');
+  if (!container) return;
+  const liste = appConfig.yetkiliCihazlar || [];
+  if (liste.length === 0) {
+    container.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:14px 0">Henüz yetkili cihaz yok — tüm cihazlar erişebilir.</div>';
+    return;
+  }
+  const currentDevice = (_getComputerName() || '').toUpperCase().trim();
+  container.innerHTML = liste.map((c, i) => {
+    const isCurrent = String(c).toUpperCase().trim() === currentDevice;
+    return `<div style="display:flex;align-items:center;gap:10px;padding:7px 12px;background:${isCurrent ? '#E8F5E9' : 'var(--offwhite)'};border:1px solid ${isCurrent ? '#A5D6A7' : 'var(--border2)'};border-radius:8px;margin-bottom:6px">
+      <span style="font-size:16px">${isCurrent ? '💻' : '🖥️'}</span>
+      <span style="flex:1;font-family:'DM Mono',monospace;font-size:13px;font-weight:600;color:var(--navy)">${c}</span>
+      ${isCurrent ? '<span style="font-size:10px;background:#C8E6C9;color:#2E7D32;padding:2px 8px;border-radius:99px;font-weight:600">Bu Cihaz</span>' : ''}
+      <button onclick="removeYetkiliCihaz(${i})" style="padding:3px 10px;background:var(--red);color:#fff;border:none;border-radius:5px;font-size:11px;cursor:pointer;font-weight:600">Sil</button>
+    </div>`;
+  }).join('');
+}
+
+function addYetkiliCihaz() {
+  const input = document.getElementById('yeni-cihaz-input');
+  if (!input) return;
+  const val = input.value.trim().toUpperCase();
+  if (!val) { alert('Cihaz adı boş olamaz!'); return; }
+  const liste = appConfig.yetkiliCihazlar || [];
+  if (liste.some(c => c.toUpperCase().trim() === val)) { alert('Bu cihaz zaten listede!'); return; }
+  liste.push(val);
+  appConfig.yetkiliCihazlar = liste;
+  localStorage.setItem(APP_CONFIG_KEY, JSON.stringify(appConfig));
+  input.value = '';
+  renderYetkiliCihazlarUI();
+  pushConfigToSheets();
+  showSuccessMessage('✅ Cihaz eklendi ve Sheets\'e kaydedildi!');
+}
+
+function addCurrentDevice() {
+  const name = _getComputerName();
+  if (!name) {
+    alert('Bu tarayıcıda kayıtlı cihaz adı bulunamadı.\nÖnce "Cihaz Adımı Kaydet" alanından cihaz adınızı girin.');
+    return;
+  }
+  const input = document.getElementById('yeni-cihaz-input');
+  if (input) input.value = name;
+  addYetkiliCihaz();
+}
+
+function removeYetkiliCihaz(index) {
+  const liste = appConfig.yetkiliCihazlar || [];
+  const removed = liste[index];
+  if (!confirm(`"${removed}" cihazını listeden kaldırmak istediğinizden emin misiniz?`)) return;
+  liste.splice(index, 1);
+  appConfig.yetkiliCihazlar = liste;
+  localStorage.setItem(APP_CONFIG_KEY, JSON.stringify(appConfig));
+  renderYetkiliCihazlarUI();
+  pushConfigToSheets();
+  showSuccessMessage('🗑️ Cihaz kaldırıldı.');
+}
+
+function saveMyDeviceName() {
+  const input = document.getElementById('my-device-name-input');
+  if (!input) return;
+  const val = input.value.trim().toUpperCase();
+  if (!val) { alert('Cihaz adı boş olamaz!'); return; }
+  saveDeviceName(val);
+  showSuccessMessage('💾 Cihaz adı bu tarayıcıya kaydedildi: ' + val);
 }
 
 function requirePassword(navEl) {
@@ -2164,6 +2373,10 @@ async function checkPassword() {
       showPage('klasmanlar', pendingNavEl);
     }
     pendingNavEl = null;
+    // Cihaz adı inputunu doldur (eğer kayıtlıysa)
+    const myNameInput = document.getElementById('my-device-name-input');
+    if (myNameInput && !myNameInput.value) myNameInput.value = _getComputerName() || '';
+    renderYetkiliCihazlarUI();
   }
 
   function _fail(msg) {
@@ -7521,9 +7734,9 @@ function openAnalizOverlay(inspData, inspObj, hedef) {
   document.getElementById('ao-f-minadet').value  = 0;
   document.getElementById('ao-f-sort').value     = '';
 
-  // Gemini kayıtlı key yükle
+  // Gemini kayıtlı key yükle — önce appConfig (Sheets'ten gelen), yoksa localStorage
   try {
-    var savedKey = localStorage.getItem(AO_LS_KEY) || '';
+    var savedKey = appConfig.geminiApiKey || localStorage.getItem(AO_LS_KEY) || '';
     if (savedKey) document.getElementById('ao-gkey').value = savedKey;
   } catch(e) {}
 
@@ -7694,7 +7907,9 @@ function aoGkeySave() {
   if (!val) { aoSetKeyStatus('⚠️ Boş bırakmayın.', '#E65100'); return; }
   if (val.length < 10) { aoSetKeyStatus('⚠️ Geçersiz format. API anahtarı çok kısa.', '#E65100'); return; }
   try {
+    appConfig.geminiApiKey = val;
     localStorage.setItem(AO_LS_KEY, val);
+    localStorage.setItem(APP_CONFIG_KEY, JSON.stringify(appConfig));
     aoSetKeyStatus('✅ Kaydedildi! Sheets\'e gönderiliyor...', '#00897B');
     // Sheets'e de push et — diğer bilgisayarlar pull'da otomatik alacak
     pushConfigToSheets().then(function() {
@@ -7706,7 +7921,9 @@ function aoGkeySave() {
   catch(e) { aoSetKeyStatus('❌ Kayıt başarısız: ' + e.message, '#C62828'); }
 }
 function aoGkeyDelete() {
+  appConfig.geminiApiKey = '';
   try { localStorage.removeItem(AO_LS_KEY); } catch(e) {}
+  try { localStorage.setItem(APP_CONFIG_KEY, JSON.stringify(appConfig)); } catch(e) {}
   document.getElementById('ao-gkey').value = '';
   aoSetKeyStatus('🗑 Anahtar silindi. Sheets\'ten temizleniyor...', '#5A7FA8');
   pushConfigToSheets().catch(function(){});
