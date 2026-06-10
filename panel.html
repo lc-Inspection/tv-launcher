@@ -8537,20 +8537,33 @@ function aoRefreshSheetsData() {
           }, 2000);
         }
       } else {
-        // Veri gelmedi
-        if (btn) {
-          btn.innerHTML = '⚠️ Veri Gelmedi';
-          setTimeout(function() {
-            if (btn) { btn.innerHTML = '🔄 Veri Çek'; btn.disabled = false; }
-          }, 2500);
+        // status:'error' kontrolü — "Kayıt bulunamadı" mesajı teknik hata değil
+        var isNotFound = data.status === 'error' &&
+          typeof data.message === 'string' &&
+          (data.message.indexOf('bulunamad') !== -1 || data.message.indexOf('not found') !== -1);
+        if (isNotFound) {
+          if (btn) {
+            btn.innerHTML = 'ℹ️ Kayıt Yok';
+            setTimeout(function() {
+              if (btn) { btn.innerHTML = '🔄 Veri Çek'; btn.disabled = false; }
+            }, 2500);
+          }
+          console.info('[Veri Çek] Bu inspector için Sheets\'te kayıt bulunamadı:', data.message);
+        } else {
+          if (btn) {
+            btn.innerHTML = '⚠️ Veri Gelmedi';
+            setTimeout(function() {
+              if (btn) { btn.innerHTML = '🔄 Veri Çek'; btn.disabled = false; }
+            }, 2500);
+          }
+          console.warn('[Veri Çek] Beklenmeyen yanıt:', data);
         }
-        console.warn('[Veri Çek] Veri gelmedi:', data);
       }
     })
     .catch(function(e) {
-      console.warn('[Veri Çek] Hata:', e.message);
+      console.warn('[Veri Çek] Bağlantı hatası:', e.message);
       if (btn) {
-        btn.innerHTML = '❌ Hata';
+        btn.innerHTML = '❌ Bağlantı Hatası';
         setTimeout(function() {
           if (btn) { btn.innerHTML = '🔄 Veri Çek'; btn.disabled = false; }
         }, 2500);
