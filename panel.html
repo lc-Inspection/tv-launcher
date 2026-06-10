@@ -5161,7 +5161,11 @@ function showInspectorDetail(inspectorName) {
           istasyonSuresi: k.istasyonSuresi || 0, standartSure: k.standartSure || 0,
           kayitFiiliSure: k.kayitFiiliSure || 0, baslangic: k.baslangic,
           bitis: k.bitis, tarihGecerli: k.tarihGecerli,
-          ortalamaKontrolSn: k.adet > 0 && k.kayitFiiliSure > 0 ? Math.round(k.kayitFiiliSure / k.adet) : null
+          ortalamaKontrolSn: k.adet > 0 && k.tarihGecerli && k.baslangic && k.bitis
+  ? Math.round(Math.max(0, (new Date(k.bitis) - new Date(k.baslangic)) / 1000 / k.adet))
+  : (k.adet > 0 && k.kayitFiiliSure > 0 
+    ? Math.round(k.kayitFiiliSure / k.adet) 
+    : null)
         });
       });
     });
@@ -8508,7 +8512,9 @@ function aoApplyFilters() {
           + '<div style="font-weight:700;">' + _aoFmtSn(k.standartSure) + '</div></td>'
         + '<td style="font-family:monospace;color:' + (k.kayitFiiliSure > 0 ? '#00897B' : '#5A7FA8') + ';text-align:right;">' + _aoFmtSn(k.kayitFiiliSure) + '</td>'
         + '<td style="font-family:monospace;font-weight:700;color:' + ortColor + ';text-align:center;">'
-          + (ortSn !== null ? ortSn + 'sn<div style="font-size:9px;font-weight:400;">' + (ortSn <= k.kontrolAdetSuresi ? '✓ hedef' : '↑ hedefin üstü') + '</div>' : '—<div style="font-size:9px;color:#5A7FA8;">tarih yok</div>')
+          + (ortSn !== null ? ortSn + 'sn<div style="font-size:9px;font-weight:400;">' + (ortSn <= k.kontrolAdetSuresi ? '✓ hedef' : '↑ hedefin üstü') + '</div>' : (k.tarihGecerli 
+    ? '—<div style="font-size:9px;color:#F57F17;">kısa süre</div>'
+    : '—<div style="font-size:9px;color:#5A7FA8;">tarih yok</div>'))
           + '</td>'
         + '<td style="font-size:11px;color:#5A7FA8;text-align:center;">' + (k.tarihGecerli && k.baslangic ? _aoFmtTarih(k.baslangic) : '—') + '</td>'
         + '<td style="font-size:11px;color:#5A7FA8;text-align:center;">' + (k.tarihGecerli && k.bitis ? _aoFmtTarih(k.bitis) : '—') + '</td>'
