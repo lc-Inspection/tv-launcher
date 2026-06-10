@@ -4501,12 +4501,12 @@ function hesaplaGerceklesenSure(baslangicTarih, bitisTarih) {
   if (gercekBitis <= gercekBaslangic) return null;
   let toplamSn = (gercekBitis - gercekBaslangic) / 1000;
 
-  const ogleBaslangic = new Date(baslangic); ogleBaslangic.setHours(12, 0, 0, 0);
-  const ogleBitis = new Date(baslangic); ogleBitis.setHours(13, 0, 0, 0);
-  const cay1B = new Date(baslangic); cay1B.setHours(10, 0, 0, 0);
-  const cay1E = new Date(baslangic); cay1E.setHours(10, 15, 0, 0);
-  const cay2B = new Date(baslangic); cay2B.setHours(15, 0, 0, 0);
-  const cay2E = new Date(baslangic); cay2E.setHours(15, 15, 0, 0);
+const ogleBaslangic = new Date(baslangic); ogleBaslangic.setHours(11, 45, 0, 0);
+const ogleBitis = new Date(baslangic); ogleBitis.setHours(12, 25, 0, 0);
+const cay1B = new Date(baslangic); cay1B.setHours(9, 20, 0, 0);
+const cay1E = new Date(baslangic); cay1E.setHours(9, 35, 0, 0);
+const cay2B = new Date(baslangic); cay2B.setHours(14, 0, 0, 0);
+const cay2E = new Date(baslangic); cay2E.setHours(14, 10, 0, 0);
 
   function kesisimSn(mB, mE, cB, cE) {
     const start = Math.max(mB.getTime(), cB.getTime());
@@ -4606,9 +4606,9 @@ function hesaplaGunlukMesaiSuresi(kayitListesi) {
       return Math.max(0, (end - start) / 1000);
     }
 
-    sureSn -= molaDus(12, 0, 13, 0);   // öğle molası
-    sureSn -= molaDus(10, 0, 10, 15);  // sabah çayı
-    sureSn -= molaDus(15, 0, 15, 15);  // öğleden sonra çayı
+    sureSn -= molaDus(11, 45, 12, 25);  // öğle molası
+sureSn -= molaDus(9, 20, 9, 35);    // sabah çayı
+sureSn -= molaDus(14, 0, 14, 10);   // öğleden sonra çayı
 
     toplamMesaiSaniye += Math.max(sureSn, 0);
     toplamMesaistiSaniye += Math.max(overtimeSn, 0);
