@@ -1311,13 +1311,7 @@ label { font-size: 12px; font-weight: 500; color: var(--muted); display: block; 
             <button onclick="changePwPrompt()" style="margin-left:10px;padding:3px 10px;background:var(--amber);color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer" data-i18n="change_pw">✏️ Change Password</button>
             <span id="pw-sheets-sync-status" style="margin-left:10px;font-size:10px;color:var(--muted)">📊 Sheets Config'e otomatik senkronize edilir</span>
           </div>
-          <div style="margin-top:8px;padding:10px 14px;background:#FFF3E0;border-radius:8px;border:1px solid #FFB74D;font-size:11px;color:var(--navy)">
-            <strong data-i18n="klasman_pw_label">🔑 Classification Management Password:</strong>
-            <span style="color:var(--muted)" data-i18n="klasman_pw_hint"> Access password for this page: </span>
-            <code id="klasman-pw-display" style="background:var(--border2);padding:2px 6px;border-radius:4px;font-family:'DM Mono',monospace">****</code>
-            <button onclick="changeKlasmanPwPrompt()" style="margin-left:10px;padding:3px 10px;background:#E65100;color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer" data-i18n="change_klasman_pw">✏️ Change Classification Password</button>
-            <span style="margin-left:10px;font-size:10px;color:var(--muted)">📊 Sheets Config'e otomatik senkronize edilir</span>
-          </div>
+
         </div>
       </div>
 
@@ -1365,6 +1359,28 @@ label { font-size: 12px; font-weight: 500; color: var(--muted); display: block; 
           </div>
         </div>
       </div>
+
+      <!-- ─── Klasman Yönetimi Şifresi (açılır-kapanır, default kapalı) ─── -->
+      <div class="card" style="margin-top:16px">
+        <div class="card-header" onclick="toggleKlasmanPwSection()" style="cursor:pointer;user-select:none;background:linear-gradient(135deg,#FFF3E0 0%,#fff 60%)">
+          <h2 style="color:var(--navy)">
+            <span data-i18n="klasman_pw_label">🔑 Klasman Yönetimi Şifresi</span>
+          </h2>
+          <span id="klasman-pw-toggle-icon" style="font-size:14px;color:var(--muted);transition:transform .2s;display:inline-block">▼</span>
+        </div>
+        <div id="klasman-pw-section" style="display:none">
+          <div class="card-body">
+            <div style="padding:10px 14px;background:#FFF3E0;border-radius:8px;border:1px solid #FFB74D;font-size:11px;color:var(--navy)">
+              <strong data-i18n="klasman_pw_label">🔑 Classification Management Password:</strong>
+              <span style="color:var(--muted)" data-i18n="klasman_pw_hint"> Access password for this page: </span>
+              <code id="klasman-pw-display" style="background:var(--border2);padding:2px 6px;border-radius:4px;font-family:'DM Mono',monospace">****</code>
+              <button onclick="changeKlasmanPwPrompt()" style="margin-left:10px;padding:3px 10px;background:#E65100;color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer" data-i18n="change_klasman_pw">✏️ Change Classification Password</button>
+              <span style="margin-left:10px;font-size:10px;color:var(--muted)">📊 Sheets Config'e otomatik senkronize edilir</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
 <!-- ══════════ KLASMAN ANALİZİ ══════════ -->
 <div id="page-klasman-analiz" class="page">
@@ -2927,6 +2943,15 @@ function checkKlasmanPassword() {
     document.getElementById('kpw-input').value = '';
     document.getElementById('kpw-input').focus();
   }
+}
+
+function toggleKlasmanPwSection() {
+  var section = document.getElementById('klasman-pw-section');
+  var icon    = document.getElementById('klasman-pw-toggle-icon');
+  if (!section) return;
+  var isOpen = section.style.display !== 'none';
+  section.style.display = isOpen ? 'none' : 'block';
+  if (icon) icon.style.transform = isOpen ? '' : 'rotate(180deg)';
 }
 
 function changeKlasmanPwPrompt() {
