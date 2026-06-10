@@ -2676,29 +2676,22 @@ async function autoFetchOnStartup() {
   // Config (şifre) çek
   await pullConfigFromSheets();
 
-  // Eğer daha önce hiç veri çekilmemişse (klasmanlar boş veya varsayılan 3'lü) Sheets'ten çek
-  const isDefault = klasmanlar.length === 3 &&
-    klasmanlar.every((k,i) => ['Pantolon','Ceket','Mont'][i] === k.ad);
-  const hasNoKlasman = klasmanlar.length === 0;
-
   showStartupBanner('📥 Sheets\u2019ten veriler çekiliyor...');
 
-  // ── Klasmanları çek (boşsa veya varsayılan 3'lüyse) ──
-  if (isDefault || hasNoKlasman) {
-    console.log('🔄 İlk açılış: Sheets\u2019ten klasmanlar otomatik çekiliyor...');
-    try {
-      const data = await jsonpFetch(url, { action: 'getKlasmanlar', token });
-      if (data.status === 'ok' && Array.isArray(data.klasmanlar) && data.klasmanlar.length > 0) {
-        klasmanlar = data.klasmanlar;
-        nextId = Math.max(1, ...klasmanlar.map(k => k.id || 0)) + 1;
-        renderListe();
-        renderEditor();
-        updateKlasmanFilter();
-        console.log('✅ Klasmanlar yüklendi:', klasmanlar.length);
-      }
-    } catch(e) {
-      console.warn('Klasman otomatik çekme hatası:', e.message);
+  // ── Klasmanları her zaman çek (şifreli sayfa kullanıcılar tarafından açılamadığından) ──
+  console.log('🔄 Açılış: Sheets\u2019ten klasmanlar otomatik çekiliyor...');
+  try {
+    const data = await jsonpFetch(url, { action: 'getKlasmanlar', token });
+    if (data.status === 'ok' && Array.isArray(data.klasmanlar) && data.klasmanlar.length > 0) {
+      klasmanlar = data.klasmanlar;
+      nextId = Math.max(1, ...klasmanlar.map(k => k.id || 0)) + 1;
+      renderListe();
+      renderEditor();
+      updateKlasmanFilter();
+      console.log('✅ Klasmanlar yüklendi:', klasmanlar.length);
     }
+  } catch(e) {
+    console.warn('Klasman otomatik çekme hatası:', e.message);
   }
 
   // ── Performans verisini her zaman çek (tüm kullanıcılar güncel görsün) ──
