@@ -1,29 +1,20 @@
 {
   "name": "Inspection Performans Paneli",
-  "short_name": "IC Panel",
-  "description": "LC Waikiki Inspection Kalite Kontrol Performans Takip Paneli",
-  "start_url": "/inspection-panel/panel.html",
-  "scope": "/inspection-panel/",
+  "short_name": "Inspection",
+  "description": "Inspector performans takip ve analiz paneli",
+  "start_url": "./panel.html",
+  "scope": "./",
   "display": "standalone",
+  "orientation": "landscape-primary",
   "background_color": "#0B1F3A",
   "theme_color": "#0B1F3A",
-  "orientation": "any",
   "lang": "tr",
-  "screenshots": [
-    {
-      "src": "ikon.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "form_factor": "wide",
-      "label": "Inspection Performans Paneli"
-    }
-  ],
   "icons": [
     {
       "src": "ikon.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any"
+      "purpose": "any maskable"
     },
     {
       "src": "ikon.png",
