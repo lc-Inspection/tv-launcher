@@ -5354,6 +5354,7 @@ function showInspectorDetail(inspectorName) {
               const fresh = buildTumKayitlar(inspector);
               _aoData = fresh;
               _aoRenderStats();
+              _aoRenderTop20();
               aoApplyFilters();
               const kb = Object.values(inspector.klasmanlar).reduce((s,kd)=>s+(kd.kayitlar||[]).length,0);
               console.log('[detay] Sheets kayıtları yüklendi ve tablo güncellendi:', kb, 'kayıt');
@@ -8371,6 +8372,23 @@ async function pullKlasmanAnalizFromSheets() {
     <!-- Stats Grid -->
     <div id="ao-stats-grid" style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px;"></div>
 
+    <!-- ══ EN FAZLA KONTROL EDİLEN KLASMANLAR ══ -->
+    <div id="ao-top20-wrap" style="margin-bottom:20px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div style="display:flex;align-items:center;gap:9px;">
+          <div style="width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#1565C0,#0d47a1);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">🏆</div>
+          <div>
+            <div style="font-size:12px;font-weight:700;color:#0B1F3A;letter-spacing:-.2px;">En Fazla Kontrol Edilen Klasmanlar</div>
+            <div style="font-size:10px;color:#5A7FA8;margin-top:1px;">Adet bazında sıralanmış · Bu çalışanın kayıtlarından</div>
+          </div>
+        </div>
+        <button id="ao-top20-toggle-btn" onclick="aoTop20Toggle()" style="display:flex;align-items:center;gap:6px;padding:6px 14px;background:#EEF7FF;color:#1565C0;border:1px solid #BBDEFB;border-radius:8px;cursor:pointer;font-size:11px;font-weight:600;font-family:'DM Sans',sans-serif;transition:background .15s;" onmouseover="this.style.background='#DDEEFF'" onmouseout="this.style.background='#EEF7FF'">
+          <span id="ao-top20-toggle-icon">▼</span>
+          <span id="ao-top20-toggle-label">Tümünü Görüntüle</span>
+        </button>
+      </div>
+      <div id="ao-top20-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;"></div>
+    </div>
     <!-- ══ GEMİNİ AI BÖLÜMÜ ══ -->
     <div id="ao-gemini-wrap" style="margin-bottom:24px;">
       <!-- Toggle Bar -->
@@ -8569,6 +8587,9 @@ function openAnalizOverlay(inspData, inspObj, hedef) {
   // Stats
   _aoRenderStats();
 
+  // Top 20 Klasman
+  _aoRenderTop20();
+
   // Klasman filtre doldur
   var klSel = document.getElementById('ao-f-klasman');
   klSel.innerHTML = '<option value="">' + (translations[currentLang]||translations.tr).all_btn + '</option>';
@@ -8688,6 +8709,7 @@ function aoRefreshSheetsData() {
           var fresh = buildTumKayitlar(inspector);
           _aoData = fresh;
           _aoRenderStats();
+          _aoRenderTop20();
           aoApplyFilters();
           var kb = Object.values(inspector.klasmanlar).reduce(function(s,kd) { return s + (kd.kayitlar||[]).length; }, 0);
           console.log('[Veri Çek] Güncellendi:', kb, 'kayıt');
@@ -8763,6 +8785,77 @@ function _aoRenderStats() {
       + '<div style="font-size:9px;color:#5A7FA8;text-transform:uppercase;letter-spacing:.6px;margin-top:4px;">' + c[1] + '</div>'
       + '</div>';
   }).join('');
+}
+
+// ── Top 20 Klasman ──
+var _aoTop20Liste = [];
+var _aoTop20Expanded = false;
+
+function aoTop20Toggle() {
+  _aoTop20Expanded = !_aoTop20Expanded;
+  var btn   = document.getElementById('ao-top20-toggle-btn');
+  var icon  = document.getElementById('ao-top20-toggle-icon');
+  var label = document.getElementById('ao-top20-toggle-label');
+  if (_aoTop20Expanded) {
+    icon.textContent  = '▲';
+    label.textContent = 'Daralt';
+  } else {
+    icon.textContent  = '▼';
+    label.textContent = 'Tümünü Görüntüle';
+  }
+  _aoRenderTop20Grid();
+}
+
+function _aoRenderTop20Grid() {
+  var container = document.getElementById('ao-top20-grid');
+  if (!container) return;
+  var visible = _aoTop20Expanded ? _aoTop20Liste : _aoTop20Liste.slice(0, 8);
+  var maxAdet = _aoTop20Liste.length ? _aoTop20Liste[0].adet || 1 : 1;
+  var rankColors = ['#F9A825','#90A4AE','#CD7F32'];
+  container.innerHTML = visible.map(function(k, i) {
+    var pct      = Math.round((k.adet / maxAdet) * 100);
+    var rankBg   = i < 3 ? rankColors[i] : '#1565C0';
+    var barColor = i === 0 ? '#F9A825' : i === 1 ? '#78909C' : i === 2 ? '#CD7F32' : '#42A5F5';
+    return '<div style="background:#fff;border:1px solid #DDEEFF;border-radius:9px;padding:10px 12px;position:relative;overflow:hidden;transition:box-shadow .15s;cursor:default;" '
+      + 'onmouseover="this.style.boxShadow=\'0 4px 16px rgba(21,101,192,.15)\'" onmouseout="this.style.boxShadow=\'none\'">'
+      + '<div style="position:absolute;top:8px;right:9px;width:18px;height:18px;border-radius:5px;background:' + rankBg + ';display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;letter-spacing:-.3px;">' + (i + 1) + '</div>'
+      + '<div style="font-size:11px;font-weight:700;color:#0B1F3A;margin-bottom:5px;padding-right:22px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + k.ad + '">' + k.ad + '</div>'
+      + '<div style="display:flex;align-items:baseline;gap:4px;margin-bottom:3px;">'
+      +   '<div style="font-size:17px;font-weight:800;color:#1565C0;font-family:\'DM Mono\',monospace;line-height:1;">' + k.adet.toLocaleString('tr-TR') + '</div>'
+      +   '<div style="font-size:9px;font-weight:600;color:#8AAAC8;text-transform:uppercase;letter-spacing:.5px;">Adet</div>'
+      + '</div>'
+      + '<div style="font-size:9px;color:#8AAAC8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px;">' + k.kayit + ' kayıt</div>'
+      + '<div style="height:3px;background:#EEF7FF;border-radius:2px;overflow:hidden;">'
+      +   '<div style="height:100%;width:' + pct + '%;background:' + barColor + ';border-radius:2px;transition:width .6s ease;"></div>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+
+  // Butonu gizle: 8'den az klasman varsa toggle'a gerek yok
+  var btn = document.getElementById('ao-top20-toggle-btn');
+  if (btn) btn.style.display = _aoTop20Liste.length <= 8 ? 'none' : 'flex';
+}
+
+function _aoRenderTop20() {
+  var klasmanMap = {};
+  _aoData.forEach(function(k) {
+    var ad = k.klasman || '—';
+    if (!klasmanMap[ad]) klasmanMap[ad] = { adet: 0, kayit: 0 };
+    klasmanMap[ad].adet  += k.adet || 0;
+    klasmanMap[ad].kayit += 1;
+  });
+  _aoTop20Liste = Object.keys(klasmanMap).map(function(ad) {
+    return { ad: ad, adet: klasmanMap[ad].adet, kayit: klasmanMap[ad].kayit };
+  }).sort(function(a, b) { return b.adet - a.adet; }).slice(0, 20);
+
+  // Yeni veri geldiğinde daraltılmış başlat
+  _aoTop20Expanded = false;
+  var icon  = document.getElementById('ao-top20-toggle-icon');
+  var label = document.getElementById('ao-top20-toggle-label');
+  if (icon)  icon.textContent  = '▼';
+  if (label) label.textContent = 'Tümünü Görüntüle';
+
+  _aoRenderTop20Grid();
 }
 
 // ── Yardımcı: Süre Format ──
