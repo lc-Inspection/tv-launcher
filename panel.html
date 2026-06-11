@@ -4634,36 +4634,70 @@ function hesaplaGerceklesenSure(baslangicTarih, bitisTarih) {
   if (!baslangic || !bitis) return null;
   if (bitis <= baslangic) return null;
 
-  const gunBaslangic = new Date(baslangic);
-  gunBaslangic.setHours(8, 0, 0, 0);
-  const gercekBaslangic = baslangic < gunBaslangic ? gunBaslangic : baslangic;
-  const saatOnAltiOtuz = new Date(baslangic);
-  saatOnAltiOtuz.setHours(16, 30, 0, 0);
-  const saatYirmi = new Date(baslangic);
-  saatYirmi.setHours(20, 0, 0, 0);
-  let gercekBitis = bitis;
-  if (bitis >= saatYirmi) {
-    gercekBitis = saatOnAltiOtuz;
-  }
-  if (gercekBitis <= gercekBaslangic) return null;
-  let toplamSn = (gercekBitis - gercekBaslangic) / 1000;
-
-  const ogleBaslangic = new Date(baslangic); ogleBaslangic.setHours(12, 0, 0, 0);
-  const ogleBitis = new Date(baslangic); ogleBitis.setHours(13, 0, 0, 0);
-  const cay1B = new Date(baslangic); cay1B.setHours(10, 0, 0, 0);
-  const cay1E = new Date(baslangic); cay1E.setHours(10, 15, 0, 0);
-  const cay2B = new Date(baslangic); cay2B.setHours(15, 0, 0, 0);
-  const cay2E = new Date(baslangic); cay2E.setHours(15, 15, 0, 0);
-
-  function kesisimSn(mB, mE, cB, cE) {
-    const start = Math.max(mB.getTime(), cB.getTime());
-    const end = Math.min(mE.getTime(), cE.getTime());
-    return Math.max(0, (end - start) / 1000);
+  // Gece yarısını geçen kayıtları dilimlere böl: her gün ayrı hesapla
+  function gunDilimleriOlustur(bas, bit) {
+    const dilimler = [];
+    let dilimBas = new Date(bas);
+    while (dilimBas < bit) {
+      const dilimBit = new Date(dilimBas);
+      dilimBit.setHours(23, 59, 59, 999);
+      dilimler.push([new Date(dilimBas), dilimBit < bit ? new Date(dilimBit) : new Date(bit)]);
+      dilimBas = new Date(dilimBit);
+      dilimBas.setMilliseconds(dilimBas.getMilliseconds() + 1); // ertesi güne geç
+    }
+    return dilimler;
   }
 
-  toplamSn -= kesisimSn(gercekBaslangic, gercekBitis, ogleBaslangic, ogleBitis);
-  toplamSn -= kesisimSn(gercekBaslangic, gercekBitis, cay1B, cay1E);
-  toplamSn -= kesisimSn(gercekBaslangic, gercekBitis, cay2B, cay2E);
+  function hesaplaTekilGun(gunBas, gunBit) {
+    // O günün referans tarihi
+    const gunBase = new Date(gunBas);
+    gunBase.setHours(0, 0, 0, 0);
+
+    const gun8 = new Date(gunBase); gun8.setHours(8, 0, 0, 0);
+    const gun2030 = new Date(gunBase); gun2030.setHours(20, 0, 0, 0);
+
+    // Gün başlangıcı: 08:00'den önce ise 08:00'e çek
+    const gercekBas = gunBas < gun8 ? gun8 : gunBas;
+    // Gün bitişi: 20:00'den sonra ise 20:00'e kırp
+    const gercekBit = gunBit > gun2030 ? gun2030 : gunBit;
+
+    if (gercekBit <= gercekBas) return 0;
+
+    let sn = (gercekBit - gercekBas) / 1000;
+
+    // Mola saatleri
+    const ogleB = new Date(gunBase); ogleB.setHours(12, 0, 0, 0);
+    const ogleE = new Date(gunBase); ogleE.setHours(13, 0, 0, 0);
+    const cay1B = new Date(gunBase); cay1B.setHours(10, 0, 0, 0);
+    const cay1E = new Date(gunBase); cay1E.setHours(10, 15, 0, 0);
+    const cay2B = new Date(gunBase); cay2B.setHours(15, 0, 0, 0);
+    const cay2E = new Date(gunBase); cay2E.setHours(15, 15, 0, 0);
+
+    function kesisimSn(mB, mE, cB, cE) {
+      const start = Math.max(mB.getTime(), cB.getTime());
+      const end   = Math.min(mE.getTime(), cE.getTime());
+      return Math.max(0, (end - start) / 1000);
+    }
+
+    const ogleDus = kesisimSn(gercekBas, gercekBit, ogleB, ogleE);
+    const cay1Dus = kesisimSn(gercekBas, gercekBit, cay1B, cay1E);
+    const cay2Dus = kesisimSn(gercekBas, gercekBit, cay2B, cay2E);
+    const tumMola = ogleDus + cay1Dus + cay2Dus;
+
+    // Tüm çalışma mola saatindeyse molayı düşme (molada çalışmış sayılır)
+    if (sn - tumMola > 0) {
+      sn -= tumMola;
+    }
+    return sn;
+  }
+
+  // Gün dilimlerine böl ve her günü ayrı hesapla
+  const dilimler = gunDilimleriOlustur(baslangic, bitis);
+  let toplamSn = 0;
+  dilimler.forEach(function(d) {
+    toplamSn += hesaplaTekilGun(d[0], d[1]);
+  });
+
   return toplamSn > 0 ? toplamSn : null;
 }
 
