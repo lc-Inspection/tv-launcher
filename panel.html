@@ -1606,7 +1606,7 @@ label { font-size: 12px; font-weight: 500; color: var(--muted); display: block; 
       <div style="display: none; background: var(--lblue3); border: 1px solid var(--lblue); border-radius: var(--r); padding: 16px 18px; margin-bottom: 16px;" id="sutun-panel">
         <div style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:4px" data-i18n="col_mapping_title">🔗 Column Mapping</div>
         <div style="font-size:11px;color:var(--muted);margin-bottom:12px" data-i18n="overtime_col_hint">If no Overtime column is selected, Overall Performance is automatically calculated based on <strong>daily 7.5 hours × working days</strong>.</div>
-        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px">
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:12px">
           <div>
             <label data-i18n="col_klasman">Classification Column (A)</label>
             <select id="col-klasman" onchange="performansHesapla()"></select>
@@ -6234,6 +6234,13 @@ function fillColSelects(){
   const mesaiCol = excelCols.find(c => c.toLowerCase().includes('mesai') || c.toLowerCase().includes('shift') || c.toLowerCase().includes('çalışmasüresi')) || '';
   if (mesaiCol && document.getElementById('col-mesai')) document.getElementById('col-mesai').value = mesaiCol;
 
+  // TalepNumarası otomatik tahmin
+  const talepColAuto = excelCols.find(c => {
+    const norm = c.toLowerCase().replace(/[^a-z0-9]/g,'').replace(/ş/g,'s').replace(/ğ/g,'g').replace(/ü/g,'u').replace(/ö/g,'o').replace(/ı/g,'i').replace(/ç/g,'c');
+    return norm.includes('talepno') || norm.includes('talepnumarasi') || norm.includes('talep') || norm === 'talep';
+  }) || '';
+  if (talepColAuto && document.getElementById('col-talep')) document.getElementById('col-talep').value = talepColAuto;
+
   // InspectionYapilanDepo otomatik tahmin
   const yapilanDepoColAuto = excelCols.find(c => c.toLowerCase().replace(/[^a-z]/g,'').includes('yapilandepo') || c.toLowerCase().replace(/\s/g,'') === 'inspectionyapilandepo') || excelCols[19] || '';
   if (yapilanDepoColAuto && document.getElementById('col-yapilan-depo')) document.getElementById('col-yapilan-depo').value = yapilanDepoColAuto;
@@ -6601,6 +6608,11 @@ function performansHesapla(){
   const bitisCol = document.getElementById('col-bitis')?.value || '';
   const mesaiCol = document.getElementById('col-mesai')?.value || '';
   const talepCol = document.getElementById('col-talep')?.value || '';
+  // talepCol seçilmemişse Excel sütun adlarından otomatik bul
+  const talepColFallback = talepCol || excelCols.find(c => {
+    const norm = c.toLowerCase().replace(/[^a-z0-9]/g,'').replace(/ş/g,'s').replace(/ğ/g,'g').replace(/ü/g,'u').replace(/ö/g,'o').replace(/ı/g,'i').replace(/ç/g,'c');
+    return norm.includes('talepno') || norm.includes('talepnumarasi') || norm === 'talep';
+  }) || '';
   const yapilanDepoCol = document.getElementById('col-yapilan-depo')?.value || '';
   const sonucCol = document.getElementById('col-sonuc')?.value || '';
   const orneklemeMod = document.querySelector('input[name="ornekleme-mod"]:checked')?.value || 'kapali';
@@ -6770,7 +6782,7 @@ function performansHesapla(){
     if (kayitFiiliSure && kayitFiiliSure > 0) {
       kl.toplamKayitFiiliSure += kayitFiiliSure;
     }
-    kl.kayitlar.push({ no: kl.kayitlar.length + 1, klasman: excelKlasman, adet, standartSure, kayitFiiliSure, kontrolAdetSuresi: klasmanInfo.urunKontrolSuresi, istasyonSuresi: klasmanInfo.istasyonSuresi, istasyonDetay: klasmanInfo.istasyonDetay || [], baslangic: parsedBaslangic, bitis: parsedBitis, tarihGecerli, talepNo: talepCol ? String(row[talepCol]||'').trim() : '' });
+    kl.kayitlar.push({ no: kl.kayitlar.length + 1, klasman: excelKlasman, adet, standartSure, kayitFiiliSure, kontrolAdetSuresi: klasmanInfo.urunKontrolSuresi, istasyonSuresi: klasmanInfo.istasyonSuresi, istasyonDetay: klasmanInfo.istasyonDetay || [], baslangic: parsedBaslangic, bitis: parsedBitis, tarihGecerli, talepNo: talepColFallback ? String(row[talepColFallback]||'').trim() : '' });
 
     inspectorMap[ins].toplamAdet += adet;
   });
