@@ -56,7 +56,7 @@ body:hover #badge { opacity: 1; }
 const params = new URLSearchParams(location.search);
 const SCREEN_ID = params.get('screen');
 // API URL burada sabit — TV'ye sadece ?screen=scr_XXX yazmak yeterli
-const HARDCODED_API = 'https://script.google.com/macros/s/AKfycbwi5ZohklFtTAPzGBgFVRKKhOkMTu6fQ7mRzsa0Os5nCko8PMcRfCaCwJIitsLe5lV3JA/exec';
+const HARDCODED_API = 'https://script.google.com/macros/s/AKfycbwaH6wFiXIkzGFf8mW3irnf62thoNAFYp_ggSTkhVqmMmZGNs8iny6c3MbxesxFBsrvug/exec';
 const API = params.get('api') || HARDCODED_API;
 
 // ── Durum ekranı ─────────────────────────────────────
@@ -76,7 +76,7 @@ async function fetchPlayerData() {
   if (!API) throw new Error('API URL eksik — admin panelinden URL\'i kopyalayın');
   if (!SCREEN_ID) throw new Error('URL\'de ?screen=ID parametresi eksik');
   const url = `${API}?action=getPlayerData&screenId=${encodeURIComponent(SCREEN_ID)}`;
-  const r = await fetch(url);
+  const r = await fetch(url, { signal: AbortSignal.timeout(10000) });
   const json = await r.json();
   if (!json.ok) throw new Error(json.error || 'Sunucu hatası');
   return json.data; // { screen, items }
@@ -227,6 +227,16 @@ document.addEventListener('keydown', e => {
   if (e.key === 'f' || e.key === 'F') document.documentElement.requestFullscreen?.();
   if (e.key === 'r' || e.key === 'R') { clearTimeout(nextTimer); init(); }
 });
+
+// Samsung TV tam ekran
+function tryFullscreen() {
+  const el = document.documentElement;
+  if (el.requestFullscreen) el.requestFullscreen().catch(()=>{});
+  else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+}
+document.addEventListener('click', tryFullscreen, { once: true });
+document.addEventListener('touchstart', tryFullscreen, { once: true });
+setTimeout(tryFullscreen, 500);
 
 init();
 </script>
