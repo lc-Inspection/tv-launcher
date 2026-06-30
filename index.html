@@ -119,6 +119,12 @@
     }
   }
 
+  // URL'de ?reset=1 varsa eski cihaz kaydını temizle (TV'de console'a erişim zor olduğu için kolay sıfırlama yolu)
+  if (window.location.search.includes("reset=1")) {
+    localStorage.clear();
+    console.log("localStorage temizlendi (reset=1 parametresi ile).");
+  }
+
   let aktifVideoUrl = null; // şu an oynayan video'nun orijinal (sunucu) URL'i
 
   async function checkScreenStatus() {
