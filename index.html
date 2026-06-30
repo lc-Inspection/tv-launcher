@@ -146,6 +146,22 @@
         // Eğer video değişmediyse hiçbir şey yapma (zaten oynuyor)
         if (screenData.video_url === aktifVideoUrl) return;
 
+        // Yeni bir video atandı: TV hafızasında yer kaplamasın diye eski videoları önbellekten temizle
+        if ("caches" in window) {
+          try {
+            const cache = await caches.open(CACHE_NAME);
+            const eskiKeyler = await cache.keys();
+            for (const req of eskiKeyler) {
+              if (req.url !== screenData.video_url) {
+                await cache.delete(req);
+                console.log("Eski video önbellekten silindi:", req.url);
+              }
+            }
+          } catch (err) {
+            console.warn("Eski önbellek temizlenemedi:", err);
+          }
+        }
+
         const blobUrl = await getOfflineVideoUrl(screenData.video_url);
 
         if (!blobUrl) {
